@@ -19,11 +19,4 @@ if [[ $? -ne 0 ]]; then
     exit 1
 fi
 
-pandoc -f html -t markdown -o "${cmd}.md" "$TEMP_HTML"
-
-if [[ $? -ne 0 ]]; then
-    echo "Failed to convert HTML to Markdown"
-    exit 1
-fi
-
-echo "Results saved to $(realpath "${cmd}.md")"
+pandoc -f html -t markdown -o - "$TEMP_HTML"

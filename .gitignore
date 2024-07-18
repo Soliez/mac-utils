@@ -1,6 +1,8 @@
 # Files in the same directory to be excluded
 brew.sh
 sims.sh
+verbose-downloader.sh
+
 
 # Created by https://www.toptal.com/developers/gitignore/api/macos,vim,python,dotenv,git,homebrew
 # Edit at https://www.toptal.com/developers/gitignore?templates=macos,vim,python,dotenv,git,homebrew
