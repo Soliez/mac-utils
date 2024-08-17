@@ -8,7 +8,7 @@ This script searches for framework directories at a given path and outputs the r
 
 Add the following line to your shell profile (.profile|.zprofile|.zshrc|.bash_profile|.bashrc|etc)
     alias lsframework="<full-path-to-lsframework.sh>"
-    
+
 Replace <full-path-to-lsframework.sh> with the full path to lsframework.sh on your computer
 
 Requirements: 
@@ -55,10 +55,7 @@ show_help() {
         "    GitHub: https://github.com/Soliez/mac-utils"
         )
 
-    for line in "${lines[@]}";
-    do
-        echo "$line"
-    done
+    printf "%s\n" "${lines[@]}" | less
 }
 
 
