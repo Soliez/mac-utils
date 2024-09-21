@@ -50,7 +50,7 @@ show_help() {
         ""
         "PROJECT"
         "    This script is from the mac-utils repo on GitHub."
-        "    mac-utils is a collection of useful (mostly macOS specific) shell scripts."
+        "    mac-utils is a collection of useful (mostly macOS specific) shell and python scripts."
         ""
         "    GitHub: https://github.com/Soliez/mac-utils"
         )
