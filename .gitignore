@@ -2,6 +2,9 @@
 brew.sh
 sims.sh
 verbose-downloader.sh
+igdl.sh
+xgdl.sh
+
 
 
 # Created by https://www.toptal.com/developers/gitignore/api/macos,vim,python,dotenv,git,homebrew
@@ -253,4 +256,4 @@ tags
 # Persistent undo
 [._]*.un~
 
-# End of https://www.toptal.com/developers/gitignore/api/macos,vim,python,dotenv,git,homebrew
+# End of https://www.toptal.com/developers/gitignore/api/macos,vim,python,dotenv,git,homebrew:
