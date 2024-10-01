@@ -2,6 +2,8 @@
 brew.sh
 sims.sh
 verbose-downloader.sh
+xgurl.sh
+esbackup.sh
 
 
 # Created by https://www.toptal.com/developers/gitignore/api/macos,vim,python,dotenv,git,homebrew
@@ -254,3 +256,4 @@ tags
 [._]*.un~
 
 # End of https://www.toptal.com/developers/gitignore/api/macos,vim,python,dotenv,git,homebrew
+esbackup.sh
