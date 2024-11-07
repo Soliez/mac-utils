@@ -5,6 +5,13 @@ verbose-downloader.sh
 xgurl.sh
 esbackup.sh
 igdl.sh
+xgdl.sh
+xgurl.sh
+wflog.sh
+viewscript.sh
+applyBatch.sh
+esbackup.sh
+
 
 
 # Created by https://www.toptal.com/developers/gitignore/api/macos,vim,python,dotenv,git,homebrew
