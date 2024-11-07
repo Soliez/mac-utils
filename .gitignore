@@ -4,6 +4,11 @@ sims.sh
 verbose-downloader.sh
 igdl.sh
 xgdl.sh
+xgurl.sh
+wflog.sh
+viewscript.sh
+applyBatch.sh
+esbackup.sh
 
 
 
