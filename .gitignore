@@ -11,6 +11,8 @@ wflog.sh
 viewscript.sh
 applyBatch.sh
 esbackup.sh
+mkfs.sh
+wfmanifest-logger.sh
 
 
 
