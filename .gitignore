@@ -264,10 +264,3 @@ Sessionx.vim
 tags
 # Persistent undo
 [._]*.un~
-
-<<<<<<< HEAD
-# End of https://www.toptal.com/developers/gitignore/api/macos,vim,python,dotenv,git,homebrew
-esbackup.sh
-=======
-# End of https://www.toptal.com/developers/gitignore/api/macos,vim,python,dotenv,git,homebrew:
->>>>>>> refactor
