@@ -1,20 +1,79 @@
 #!/bin/bash
 
-# Dependencies: python3. MacOS ships with python3.8
+show_usage() {
+    echo "Usage: $0 [OPTION] [PATH]"
+    echo "Try '$0 --help' or 'man exists' for more information."
+}
 
-# This scripts determines whether a provided filepath points to a valid location on disk, and returns the result as boolean
+show_help() {
+    cat << EOF
+Usage: $0 [OPTION] [PATH]
 
-# To run this this script without needing to provide the full path or file extension, add the line below to your shell profile file
+Check if a provided path exists, optionally providing detailed output.
 
-# alias bundleid="<path-to-this-script-on-your-computer>"
+Options:
+  -h, --help        Display this help message and exit.
+  -v, --verbose     Display detailed information about the path.
 
-# Replace <path-to-this-script-on-your-computer> with the path to this script on your computer 
+Examples:
+  $0 ./myfile.txt
+  $0 -v ./mydirectory/
+EOF
+}
 
+isValid() {
+    [[ -e "$1" ]];
+}
 
-if [ $# -eq 0 ]; then
-    echo "Usage: $0 <path>"
-    exit 1
-fi
+isFile() {
+    [[ -f "$1" ]];
+}
 
-path="$1"
-python3 -c "import sys, os; print(os.path.exists(sys.argv[1]))" "$path"
+isDirectory() {
+    [[ -d "$1" ]]
+}
+
+main() {
+    if [[ $# -eq 0 ]]; then
+        show_usage
+        exit 1
+    fi
+
+    case "$1" in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        -v|--verbose)
+            if [[ -z "$2" ]]; then
+                echo -e "Error: Missing PATH argument for verbose option.\n"
+                show_usage
+                exit 1
+            fi
+            path="$2"
+            if isFile "$path"; then
+                echo "File: '$path'"
+                exit 0
+            elif isDirectory "$path"; then
+                echo "Directory: '$path'"
+                exit 0
+            elif isValid "$path"; then
+                echo "Exists but is neither file nor directory: '$path'"
+                exit 0
+            else
+                echo "Invalid Location: '$path'"
+                exit 1
+            fi
+            ;;
+        *)
+            path="$1"
+            if isValid "$path"; then
+                exit 0
+            else
+                exit 1
+            fi
+            ;;
+    esac
+}
+
+main "$@"
