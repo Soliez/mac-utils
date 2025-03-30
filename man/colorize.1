@@ -1,0 +1,60 @@
+.TH COLORIZE 1 "Mac-Utils Repository Docs"
+.SH NAME
+colorize - Text Coloring Utility
+.SH SYNOPSIS
+.B colorize
+[\fIOPTION\fR] [\fIARGUMENT\fR]
+.SH DESCRIPTION
+The \fBcolorize\fR utility is used to add color to text using ANSI color escape sequences.
+.SH OPTIONS
+.TP
+.BR \-black
+Color the input text black
+.TP
+.BR \-red
+Color the input text red
+.TP
+.BR \-green
+Color the input text green
+.TP
+.BR \-yellow
+Color the input text yellow
+.TP
+.BR \-blue
+Color the input text blue
+.TP
+.BR \-magenta
+Color the input text magenta
+.TP
+.BR \-cyan
+Color the input text cyan
+.TP
+.BR \-white
+Color the input text white
+.TP
+.BR \-h ", " \-\-help
+Show this help message
+.SH EXAMPLES
+Colorize text provided as an argument
+
+.RS
+.nf
+colorize -red "Hello World"
+
+.fi
+.RE
+Colorize text read from standard-in
+
+.RS
+.nf
+echo "Hello World" | colorize -green
+
+.fi
+.RE
+.SH PROJECT
+.PP
+This script is from the \fBmac-utils\fR repo on GitHub.
+.PP
+\fBmac-utils\fR is a collection of useful (mostly macOS specific) shell scripts.
+
+\fBGitHub:\fR \fIhttps://github.com/Soliez/mac-utils\fR
