@@ -1,0 +1,44 @@
+.TH EXISTS 1 "Mac-Utils Repository Docs"
+.SH NAME
+exists - Path Validation Utility
+.SH SYNOPSIS
+.B exists
+[\fIOPTION\fR] [\fIARGUMENT\fR]
+.SH DESCRIPTION
+The \fBexists\fR utility is used to check whether a path exists, optionally providing detailed output.
+.SH OPTIONS
+.TP
+.BR \-v ", " \-\-verbose
+Provide detailed output about the path provided
+.TP
+.BR \-h ", " \-\-help
+Show this help message
+.SH EXAMPLES
+Check whether a path points to a valid location on disk
+
+.RS
+.nf
+exists "$HOME" # Returns exit code 0
+
+exists "$HOME/fakedir" # Returns exit code 1
+
+.fi
+.RE
+Check whether a path points to a valid location on disk, providing verbose output
+
+.RS
+.nf
+exists -v "$HOME" # Prints 'Directory: "$HOME"' and returns exit code 0
+
+exists -v "$HOME/example.txt" # Prints 'File: "$HOME/example.txt"' and returns exit code 0
+
+exists -v "$HOME/fakedir" # Prints 'Invalid Location: "$HOME/fakedir"' and returns exit code 1
+.fi
+.RE
+.SH PROJECT
+.PP
+This script is from the \fBmac-utils\fR repo on GitHub.
+.PP
+\fBmac-utils\fR is a collection of useful (mostly macOS specific) shell scripts.
+
+\fBGitHub:\fR \fIhttps://github.com/Soliez/mac-utils\fR
