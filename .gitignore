@@ -1,17 +1,17 @@
 # Files in the same directory to be excluded
-bin/brew.sh
-bin/sims.sh
-bin/verbose-downloader.sh
-bin/xgurl.sh
-bin/esbackup.sh
-bin/igdl.sh
-bin/xgdl.sh
-bin/wflog.sh
-bin/viewscript.sh
-bin/applyBatch.sh
-bin/esbackup.sh
-bin/mkfs.sh
-bin/wfmanifest-logger.sh
+bin/brew
+bin/sims
+bin/verbose-downloader
+bin/xgurl
+bin/esbackup
+bin/igdl
+bin/xgdl
+bin/wflog
+bin/viewscript
+bin/applyBatch
+bin/esbackup
+bin/mkfs
+bin/wfmanifest-logger
 
 
 
