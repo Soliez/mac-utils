@@ -1,0 +1,44 @@
+#!/bin/bash
+
+show_usage(){
+    echo "Usage: $0 [OPTION] <URL>"
+    echo "Try '$0 --help' or 'man urlname' for more information."
+}
+
+show_help(){
+cat << EOF
+Usage: $0 [OPTION] <URL>
+
+Retrieve the title of a webpage
+
+Options:
+    -h, --help      Display this help message and exit
+
+Examples:
+    $0 https://github.com/Soliez/mac-utils
+EOF
+}
+
+get_title(){
+    local url="$1"
+    curl -s "$url" | sed -n 's|.*<title>\(.*\)</title>.*|\1|p'
+}
+
+main(){
+    if [[ $# -eq 0 ]]; then
+        show_usage
+        exit 1
+    fi
+
+    case "$1" in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        *)
+            get_title "$1"
+            ;;
+    esac
+}
+
+main "$@"
