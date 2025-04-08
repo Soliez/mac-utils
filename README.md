@@ -62,7 +62,7 @@ export PATH="/path/to/mac-utils/bin:$PATH"
 
 To get help on any of the scripts in this repository you can view it's manual page using `man <SCRIPT-NAME>` or by calling the script with its `-h` or `--help` flag.
 
-### To enable this, first run the following commands 
+To enable this, first run the following commands 
 
 ```bash
 # Create a local man directory in your home directory if it dosen't already exist
@@ -76,13 +76,11 @@ cp /path/to/mac-utils/man/*.1 ~/man/man1
 
 <br>
 
-### Next, add the following lines to your shell profile file (i.e `~/.profile` or `~/.zprofile`)
+Next, add the following lines to your shell profile file (i.e `~/.profile` or `~/.zprofile`)
 
 ```bash
 # Add mac-utils repo man pages to MANPATH
-export MANPATH="/path/to/mac-utils/man:$MANPATH"
+export MANPATH="$HOME/man/man1:$MANPATH"
 ```
-
-> In this example, replace `/path/to/mac-utils/man` with the full to path to the `man` directory in the mac-utils repository on your computer.
 
 ---
