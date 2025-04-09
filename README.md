@@ -1,13 +1,50 @@
 ![Repo Banner](Media/Mac-Utils%20Repo%20Banner.png)
 
-### _A collection of useful shell scripts for your Mac_
+> ### A collection of useful shell scripts for your Mac
 
----
 
 <br>
 
+# Getting Started
 
-# Installation
+To get started using the tools in this repository first install them using one of the methods below.
+
+# Automated Installation (Makefile)
+
+## Step 1: Clone this repository
+
+```bash
+git clone https://github.com/Soliez/mac-utils.git
+```
+
+## Step 2: Run the Makefile
+
+First, `cd` into the project directory.
+
+```bash
+cd mac-utils
+```
+
+Then, run the following `make` command.
+
+### `zsh`
+```bash
+make install
+```
+
+### `bash`
+```bash
+make install PROFILE=~/.profile
+```
+
+### Other shells
+```bash
+make install PROFILE=<path-to-shell-profile>
+```
+
+> If you use a shell other than `bash` or `zsh`, replace `<path-to-shell-profile>` with the path to your shell profile file in the above command
+
+# Manual Installation
 
 ## Step 1: Install Command Line Tools for Xcode
 
