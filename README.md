@@ -1,13 +1,11 @@
 ![Repo Banner](Media/Mac-Utils%20Repo%20Banner.png)
 
-> ### A collection of useful shell scripts for your Mac
-
-
-<br>
 
 # Getting Started
 
 To get started using the tools in this repository first install them using one of the methods below.
+
+<br>
 
 # Automated Installation (Makefile)
 
@@ -43,6 +41,8 @@ make install PROFILE=<path-to-shell-profile>
 ```
 
 > If you use a shell other than `bash` or `zsh`, replace `<path-to-shell-profile>` with the path to your shell profile file in the above command
+
+<br>
 
 # Manual Installation
 
