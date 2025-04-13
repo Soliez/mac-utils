@@ -1,0 +1,50 @@
+.TH UBUTIL 1 "Mac-Utils Repository Docs"
+.SH NAME
+ubutil - Universal Binary Extraction Utility
+.SH SYNOPSIS
+.B ubutil
+[\fIOPERATION\fR] [\fIEXECUTABLE\fR] [\fIARCHITECTURE\fR] [\fIOUTPATH\fR]
+.SH DESCRIPTION
+The \fBubutil\fR utility is used for extracting or removing single architecture executables from universal binaries
+.SH OPTIONS
+.TP
+.BR \-e ", " \-\-extract
+Extract a single architecture executable from the input binary
+.TP
+.BR \-r ", " \-\-remove
+Remove a single architecture executable from the input binary
+.TP
+.BR \-arm ", " \-\-arm64
+Extract or remove a thin arm64 executable
+.TP
+.BR \-arm64e
+Extract or remove an arm64e executable
+.TP
+.BR \-x86 ", " \-\-x86_64
+Extract or remove an x86_64 executable
+.TP
+.BR \-h ", " \-\-help
+Show this help message
+.SH EXAMPLES
+Extract a single architecture executable to separate file
+.RS
+.nf
+ubutil -extract /path/to/input/binary -arm /path/to/output
+
+.fi
+.RE
+
+Remove a single architecture executable from a binary completely
+.RS
+.nf
+ubutil -remove /path/to/input/binary -arm /path/to/input/binary
+.if
+.RE
+
+.SH PROJECT
+.PP
+This script is from the \fBmac-utils\fR repo on GitHub.
+.PP
+\fBmac-utils\fR is a collection of useful (mostly macOS specific) shell scripts.
+
+\fBGitHub:\fR \fIhttps://github.com/Soliez/mac-utils\fR
