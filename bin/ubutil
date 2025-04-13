@@ -1,0 +1,124 @@
+#!/bin/bash
+
+show_usage(){
+    echo "Usage: $0 [OPERATION] [EXECUTABLE] [ARCH] [OUTPATH]"
+    echo "Try '$0 --help' or 'man ubutil' for more information."
+}
+
+show_help(){
+cat << EOF
+Usage: $0 [OPERATION] [EXECUTABLE] [ARCH] [OUTPATH]
+
+Extract or remove single architecture executables from universal binaries
+
+Options:
+    -e, --extract    Extract a single architecture executable from the input binary
+    -r, --remove     Remove a single architecture executable from the input binary
+
+    -arm, --arm64    Extract or remove an arm64 executable
+    -arm64e          Extract or remove an arm64e executable
+    -x86, --x86_64   Extract or remove an x86_64 executable
+
+    -h, --help       Show this help message
+
+Examples:
+    Extract a single architecture executable to separate file
+        ubutil -extract /path/to/input/binary -arm /path/to/output
+
+    Remove a single architecture executable from a binary completely
+        ubutil -remove /path/to/input/binary -arm /path/to/input/binary
+EOF
+}
+
+get_architectures() {
+    lipo -archs "$1"
+}
+
+map_architecture() {
+    case "$1" in
+        -arm|--arm64) echo "arm64" ;;
+        -arm64e) echo "arm64e" ;;
+        -x86|--x86_64) echo "x86_64" ;;
+        *) echo "unknown" ;;
+    esac
+}
+
+validate_architecture() {
+    local binary="$1"
+    local arch="$2"
+
+    local available_archs
+    available_archs=$(get_architectures "$binary")
+
+    if ! grep -qw "$arch" <<< "$available_archs"; then
+        echo "Error: Architecture '$arch' not found in binary. Available architectures: $available_archs" >&2
+        exit 1
+    fi
+}
+
+extract_binary(){
+    local binary="$1"
+    local arch_option="$2"
+    local outpath="$3"
+
+    local arch
+    arch=$(map_architecture "$arch_option")
+
+    if [[ "$arch" == "unknown" ]]; then
+        show_usage
+        exit 1
+    fi
+
+    validate_architecture "$binary" "$arch"
+    lipo -thin "$arch" "$binary" -output "$outpath"
+}
+
+excise_binary(){
+    local binary="$1"
+    local arch_option="$2"
+    local outpath="$3"
+
+    local arch
+    arch=$(map_architecture "$arch_option")
+
+    if [[ "$arch" == "unknown" ]]; then
+        show_usage
+        exit 1
+    fi
+
+    validate_architecture "$binary" "$arch"
+    lipo -remove "$arch" "$binary" -output "$outpath"
+}
+
+main(){
+
+    operation="$1"
+
+    case "$operation" in
+        -e|--extract)
+            if [[ $# -lt 4 ]]; then
+                show_usage
+                exit 1
+            else
+                extract_binary "$2" "$3" "$4"
+            fi
+            ;;
+        -r|--remove)
+            if [[ $# -lt 4 ]]; then
+                show_usage
+                exit 1
+            else
+                excise_binary "$2" "$3" "$4"
+            fi
+            ;;
+        -h|--help)
+            show_help
+            ;;
+        *)
+            show_usage
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"
