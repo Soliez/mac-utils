@@ -1,11 +1,173 @@
-#!/bin/bash
+#!/usr/bin/env python3
+
+import re
+import sys
+import subprocess
+from pathlib import Path
 
 
-if [ $# -eq 0 ]; then
-    echo "Usage: $0 <path>"
-    exit 1
-fi
+def show_usage() -> None:
+    print("Usage: uti [-h, --help] [--show-dynamic] <filepath>")
+    print("Try 'uti --help' or 'man uti' for more information.")
 
-path="$1"
 
-mdls -name kMDItemContentType  "$path"  | grep -Eo '"(.+?)"' | tr -d \"
+def show_help() -> None:
+    lines = [
+        "Usage: uti [-h, --help] [--show-dynamic] <filepath>",
+        "",
+        "Uniform Type Identifier (UTI) Utility",
+        "",
+        "Options:",
+        "   --show-dynamic  Output the dynamic UTI without resolving it",
+        "   -h, --help      Show this help message. If this flag is present, all other arguments will be ignored",
+        "",
+        "Examples:",
+        "   Get the UTI of the item at the provided path. Dynamic UTIs will be resolved by default",
+        "       uti image.png",
+        "",
+        "   Get the UTI of the item at the provided path without resolving dynamic UTIs",
+        "       uti --show-dynamic image.png"
+    ]
+    message = '\n'.join(lines)
+    print(message)
+
+
+def get_uti(path: str) -> str:
+    '''
+    Gets the UTI of the item at the provided path
+    '''
+
+    command = ['mdls', '-name', 'kMDItemContentType', '-raw', path]
+    process = subprocess.run(args=command, capture_output=True, text=True)
+    uti = process.stdout
+    return uti
+
+
+
+def decode_dynamic_uti(uti: str) -> str:
+    '''
+    Decodes the dynamic uti provided, then returns the result
+    '''
+    
+    # Define the vector of valid characters used in the encoded UTI
+    vector = "abcdefghkmnpqrstuvwxyz0123456789"
+
+    # Validate that the UTI begins with "dyn.a"
+    if not uti.startswith("dyn.a"):
+        print("Error: Input not recognized as dynamic UTI")
+        exit(1)
+
+    encoded = uti[5:] # Skip the first 5 characters ("dyn.a") and get the rest of the string
+    result = []
+    decoded = 0
+    decoded_bits = 0
+
+    # Base32 decode each character in the encoded part of the UTI
+    for char in encoded:
+        try:
+            position = vector.index(char)
+        except ValueError:
+            print(f"Error, character '{char}' invalid for custom encoding scheme {[i for i in vector]}")
+            return None
+        
+        # Shift the accumulated decoded value left by 5 bits to make room for the new 5 bits
+        decoded = (decoded << 5) | position
+        
+        # Increment the count of decoded bits by 5
+        decoded_bits += 5
+
+        # If we have at least 8 bits, we can extract a UTF-8 code unit
+        if decoded_bits >= 8:
+            # Calculate the number of extra bits beyond 8
+            extra = decoded_bits - 8
+
+            # Extract the top 8 bits and append as a character to the result list
+            result.append(chr(decoded >> extra))
+
+            # Mask out the top 8 bits, leaving only the extra bits
+            decoded &= (1 << extra) - 1
+
+            # Update the count of decoded bits to the number of extra bits
+            decoded_bits = extra
+
+    if decoded != 0:
+        # If there are leftover bits, the input UTI was not properly encoded
+        print(f"{decoded_bits} leftover bits: {decoded}")
+        return None
+
+    decoded_uti =  ''.join(result)
+    return decoded_uti
+
+
+def uti_string_replace(decoded_uti: str) -> str:
+    '''
+    Maps the placeholders in the decoded UTI to their corresponding values
+    '''
+    
+    properties = {
+        '0': 'UTTypeConformsTo',
+        '1': 'public.filename-extension',
+        '2': 'com.apple.ostype',
+        '3': 'public.mime-type',
+        '4': 'com.apple.nspboard-type',
+        '5': 'public.url-scheme',
+        '6': 'public.data',
+        '7': 'public.text',
+        '8': 'public.plain-text',
+        '9': 'public.utf16-plain-text',
+        'A': 'com.apple.traditional-mac-plain-text',
+        'B': 'public.image',
+        'C': 'public.video',
+        'D': 'public.audio',
+        'E': 'public.directory',
+        'F': 'public.folder'
+    }
+
+    # Only match standalone occurrences of keys
+    pattern = re.compile('|'.join(re.escape(key) for key in properties))
+
+    # Replace only exact matches
+    def replace_match(match):
+        return properties[match.group(0)]
+
+    replaced_uti = pattern.sub(replace_match, decoded_uti)
+
+    return replaced_uti
+
+
+def main():
+    '''
+    Dynamic Uniform Type Identifier (UTI) decoder.
+    '''
+
+    if len(sys.argv) < 1:
+        show_usage()
+        exit(1)
+    
+    if '-h' in sys.argv or '--help' in sys.argv:
+        show_help()
+        exit(0)
+
+    # NOTE: The path should ALWAYS be the last argument provided
+    path = Path(sys.argv[-1])
+
+    if not path.exists():
+        print("Error: Invalid Path")
+        exit(1)
+
+    uti = get_uti(path.resolve().__str__())
+
+    if uti.startswith('dyn.a'):
+        if '--show-dynamic' in sys.argv:
+            print(uti)
+            exit(0)
+        else:
+            decoded_uti = decode_dynamic_uti(uti)
+            fully_decoded_uti = uti_string_replace(decoded_uti)
+            print(fully_decoded_uti)
+    else:
+        print(uti)
+
+
+if __name__ == "__main__":
+    main()
