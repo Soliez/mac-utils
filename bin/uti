@@ -7,32 +7,36 @@ from pathlib import Path
 
 
 def show_usage() -> None:
-    print("Usage: uti [-h, --help] [--show-dynamic] <filepath>")
+    print("Usage: uti [-h, --help] [--show-dynamic] [--resolve-string] <filepath-or-string>")
     print("Try 'uti --help' or 'man uti' for more information.")
 
 
 def show_help() -> None:
     lines = [
-        "Usage: uti [-h, --help] [--show-dynamic] <filepath>",
+        "Usage: uti [-h, --help] [--show-dynamic] [--resolve-string] <filepath-or-string>",
         "",
         "Uniform Type Identifier (UTI) Utility",
         "",
         "Options:",
-        "   --show-dynamic  Output the dynamic UTI without resolving it",
-        "   -h, --help      Show this help message. If this flag is present, all other arguments will be ignored",
+        "   --resolve-string  Interpret the final argument as a dynamic UTI and resolve it",
+        "   --show-dynamic    Output the dynamic UTI without resolving it",
+        "   -h, --help        Show this help message. If this flag is present, all other arguments will be ignored",
         "",
         "Examples:",
         "   Get the UTI of the item at the provided path. Dynamic UTIs will be resolved by default",
-        "       uti image.png",
+        "       uti MyFile.dat",
         "",
         "   Get the UTI of the item at the provided path without resolving dynamic UTIs",
-        "       uti --show-dynamic image.png"
+        "       uti --show-dynamic MyFile.dat",
+        "",
+        "   Resolve a dynamic UTI passed as an argument",
+        "       uti --resolve-string dyn.ah62d4r3qkk7dgtpyqz6hkp42fzxhe55cfvy042phqy1zuppgsm10esvvhzxhe55c"
     ]
     message = '\n'.join(lines)
     print(message)
 
 
-def get_uti(path: str) -> str:
+def get_file_uti(path: str) -> str:
     '''
     Gets the UTI of the item at the provided path
     '''
@@ -100,9 +104,6 @@ def decode_dynamic_uti(uti: str) -> str:
 
 
 def uti_string_replace(decoded_uti: str) -> str:
-    '''
-    Maps the placeholders in the decoded UTI to their corresponding values
-    '''
     properties = {
         '0': 'UTTypeConformsTo',
         '1': 'public.filename-extension',
@@ -122,22 +123,23 @@ def uti_string_replace(decoded_uti: str) -> str:
         'F': 'public.folder'
     }
 
-    # Pattern to match KEY=VALUE pairs, where KEY is a single char [0-9A-F], and VALUE is any chars except ':' or end of line
+    # Pattern matching key=value pairs
     pattern = re.compile(r'([?:])([0-9A-F])=([^:]+)')
+
+    def expand_values(key_desc, value):
+        # public.filename-extension values are always literal
+        if key_desc == 'public.filename-extension':
+            return value
+
+        # Split comma-separated values and expand individually if present in properties
+        parts = value.split(',')
+        expanded_parts = [properties.get(p, p) for p in parts]
+        return ','.join(expanded_parts)
 
     def replace_match(match):
         delimiter, key, value = match.groups()
-
         expanded_key = properties.get(key, key)
-        # Special rule for public.filename-extension: NEVER expand its value, it's always literal
-        if expanded_key == 'public.filename-extension':
-            expanded_value = value
-        else:
-            # Expand single-char values if in properties, otherwise leave literal
-            if len(value) == 1 and value in properties:
-                expanded_value = properties[value]
-            else:
-                expanded_value = value
+        expanded_value = expand_values(expanded_key, value)
 
         return f"{delimiter}{expanded_key}={expanded_value}"
 
@@ -147,7 +149,7 @@ def uti_string_replace(decoded_uti: str) -> str:
 
 def main():
     '''
-    Dynamic Uniform Type Identifier (UTI) decoder.
+    Uniform Type Identifier Utility.
     '''
 
     if len(sys.argv) < 1:
@@ -158,14 +160,19 @@ def main():
         show_help()
         exit(0)
 
-    # NOTE: The path should ALWAYS be the last argument provided
-    path = Path(sys.argv[-1])
-
-    if not path.exists():
-        print("Error: Invalid Path")
-        exit(1)
-
-    uti = get_uti(path.resolve().__str__())
+    if '--resolve-string' in sys.argv:
+        # NOTE: The dynamic UTI should ALWAYS be the last argument provided
+        uti = sys.argv[-1]
+        if not uti.startswith("dyn.a"):
+            print("Error: Input not recognized as dynamic UTI")
+            exit(1)
+    else:
+        # NOTE: The path should ALWAYS be the last argument provided
+        path = Path(sys.argv[-1])
+        if not path.exists():
+            print("Error: Invalid Path")
+            exit(1)
+        uti = get_file_uti(path.resolve().__str__())
 
     if uti.startswith('dyn.a'):
         if '--show-dynamic' in sys.argv:
