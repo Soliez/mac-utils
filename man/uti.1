@@ -1,0 +1,49 @@
+.TH UTI 1 "Mac-Utils Repository Docs"
+.SH NAME
+uti - Uniform Type Identifier Utility
+.SH SYNOPSIS
+.B uti
+[\fIOPTIONS\fR] [\fIPATH-OR-STRING\fR]
+.SH DESCRIPTION
+The \fButi\fR utility is used to lookup Uniform Type Identifiers (UTIs) and for resolving dynamic UTIs.
+.SH OPTIONS
+.TP
+.BR \-\-resolve\-string
+Interpret the final argument as a dynamic UTI and resolve it.
+.TP
+.BR \-\-show\-dynamic
+Output the dynamic UTI without resolving it. If the UTI is not dynamic it will be output as is.
+.TP
+.BR \-h ", " \-\-help
+Show this help message. If this flag is present, all other arguments will be ignored.
+.SH EXAMPLES
+Get the UTI of the item at the provided path. Dynamic UTIs will be resolved by default
+
+.RS
+.nf
+uti MyFile.dat
+.fi
+.RE
+
+Get the UTI of the item at the provided path without resolving dynamic UTIs
+.RS
+.nf
+
+uti --show-dynamic MyFile.dat
+.fi
+.RE
+
+Resolve a dynamic UTI passed as an argument
+.RS
+.nf
+
+uti --resolve-string dyn.ah62d4r3qkk7dgtpyqz6hkp42fzxhe55cfvy042phqy1zuppgsm10esvvhzxhe55c
+.if
+.RE
+.SH PROJECT
+.PP
+This script is from the \fBmac-utils\fR repo on GitHub.
+.PP
+\fBmac-utils\fR is a collection of useful (mostly macOS specific) shell scripts.
+
+\fBGitHub:\fR \fIhttps://github.com/Soliez/mac-utils\fR
