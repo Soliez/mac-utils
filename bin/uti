@@ -7,20 +7,20 @@ from pathlib import Path
 
 
 def show_usage() -> None:
-    print("Usage: uti [-h, --help] [--show-dynamic] [--resolve-string] <filepath-or-string>")
+    print("Usage: uti [-h, --help] [-s, --show-dynamic] [-r, --resolve-string] <filepath-or-string>")
     print("Try 'uti --help' or 'man uti' for more information.")
 
 
 def show_help() -> None:
     lines = [
-        "Usage: uti [-h, --help] [--show-dynamic] [--resolve-string] <filepath-or-string>",
+        "Usage: uti [-h, --help] [-s, --show-dynamic] [-r, --resolve-string] <filepath-or-string>",
         "",
         "Uniform Type Identifier (UTI) Utility",
         "",
         "Options:",
-        "   --resolve-string  Interpret the final argument as a dynamic UTI and resolve it",
-        "   --show-dynamic    Output the dynamic UTI without resolving it",
-        "   -h, --help        Show this help message. If this flag is present, all other arguments will be ignored",
+        "   -r, --resolve-string  Interpret the final argument as a dynamic UTI and resolve it",
+        "   -s, --show-dynamic    Output the dynamic UTI without resolving it",
+        "   -h, --help            Show this help message. If this flag is present, all other arguments will be ignored",
         "",
         "Examples:",
         "   Get the UTI of the item at the provided path. Dynamic UTIs will be resolved by default",
@@ -104,6 +104,10 @@ def decode_dynamic_uti(uti: str) -> str:
 
 
 def uti_string_replace(decoded_uti: str) -> str:
+    '''
+    Maps the placeholders in the decoded UTI to their corresponding values
+    '''
+    
     properties = {
         '0': 'UTTypeConformsTo',
         '1': 'public.filename-extension',
@@ -160,7 +164,7 @@ def main():
         show_help()
         exit(0)
 
-    if '--resolve-string' in sys.argv:
+    if '-r' in sys.argv or '--resolve-string' in sys.argv:
         # NOTE: The dynamic UTI should ALWAYS be the last argument provided
         uti = sys.argv[-1]
         if not uti.startswith("dyn.a"):
@@ -175,7 +179,7 @@ def main():
         uti = get_file_uti(path.resolve().__str__())
 
     if uti.startswith('dyn.a'):
-        if '--show-dynamic' in sys.argv:
+        if '-s' in sys.argv or '--show-dynamic' in sys.argv:
             print(uti)
             exit(0)
         else:
