@@ -2,8 +2,8 @@
 
 import re
 import sys
-import subprocess
 from pathlib import Path
+from Foundation import NSURL, NSURLTypeIdentifierKey
 
 
 def show_usage() -> None:
@@ -40,11 +40,14 @@ def get_file_uti(path: str) -> str:
     '''
     Gets the UTI of the item at the provided path
     '''
-
-    command = ['mdls', '-name', 'kMDItemContentType', '-raw', path]
-    process = subprocess.run(args=command, capture_output=True, text=True)
-    uti = process.stdout
-    return uti
+    url = NSURL.fileURLWithPath_(path)
+    success, value, error = url.getResourceValue_forKey_error_(None, NSURLTypeIdentifierKey, None)
+    
+    if success and value:
+        return value
+    else:
+        error_message = error.localizedDescription() if error else "Unknown error"
+        raise ValueError(f"Unable to determine UTI: {error_message}")
 
 
 
