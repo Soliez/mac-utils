@@ -2,43 +2,16 @@
 
 import re
 import sys
+import argparse
 from pathlib import Path
+from UniformTypeIdentifiers import UTType
 from Foundation import NSURL, NSURLTypeIdentifierKey
 
-
-def show_usage() -> None:
-    print("Usage: uti [-h, --help] [-s, --show-dynamic] [-r, --resolve-string] <filepath-or-string>")
-    print("Try 'uti --help' or 'man uti' for more information.")
-
-
-def show_help() -> None:
-    lines = [
-        "Usage: uti [-h, --help] [-s, --show-dynamic] [-r, --resolve-string] <filepath-or-string>",
-        "",
-        "Uniform Type Identifier (UTI) Utility",
-        "",
-        "Options:",
-        "   -r, --resolve-string  Interpret the final argument as a dynamic UTI and resolve it",
-        "   -s, --show-dynamic    Output the dynamic UTI without resolving it",
-        "   -h, --help            Show this help message. If this flag is present, all other arguments will be ignored",
-        "",
-        "Examples:",
-        "   Get the UTI of the item at the provided path. Dynamic UTIs will be resolved by default",
-        "       uti MyFile.dat",
-        "",
-        "   Get the UTI of the item at the provided path without resolving dynamic UTIs",
-        "       uti --show-dynamic MyFile.dat",
-        "",
-        "   Resolve a dynamic UTI passed as an argument",
-        "       uti --resolve-string dyn.ah62d4r3qkk7dgtpyqz6hkp42fzxhe55cfvy042phqy1zuppgsm10esvvhzxhe55c"
-    ]
-    message = '\n'.join(lines)
-    print(message)
 
 
 def get_file_uti(path: str) -> str:
     '''
-    Gets the UTI of the item at the provided path
+    Get the UTI of the item at the provided path
     '''
     url = NSURL.fileURLWithPath_(path)
     success, value, error = url.getResourceValue_forKey_error_(None, NSURLTypeIdentifierKey, None)
@@ -50,10 +23,23 @@ def get_file_uti(path: str) -> str:
         raise ValueError(f"Unable to determine UTI: {error_message}")
 
 
+def check_conformity(target_uti, checked_uti) -> bool:
+    '''
+    Determine whether one UTI conforms to another
+    '''
+    target_uti = UTType.typeWithIdentifier_(target_uti)
+    checked_uti = UTType.typeWithIdentifier_(checked_uti)
+    try:
+        result = target_uti.conformsToType_(checked_uti)
+        return result
+    except AttributeError:
+        print("Error: Unable to create type from given UTI")
+        return False
+
 
 def decode_dynamic_uti(uti: str) -> str:
     '''
-    Decodes the dynamic uti provided, then returns the result
+    Decode a dynamic uti 
     '''
     
     # Define the vector of valid characters used in the encoded UTI
@@ -155,42 +141,73 @@ def uti_string_replace(decoded_uti: str) -> str:
 
 
 def main():
-    '''
-    Uniform Type Identifier Utility.
-    '''
+    parser = argparse.ArgumentParser(
+        description="Uniform Type Identifier (UTI) Utility",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "\033[37mExamples:\033[0m\n"
+            "  uti get MyFile.dat\n"
+            "  uti get --show-dynamic MyFile.dat\n"
+            "  uti resolve dyn.ah62d4r3qkk7dgtpyqz6hkp42fzxhe55cfvy042phqy1zuppgsm10esvvhzxhe55c\n"
+            "  uti conforms public.png public.image\n"
+            "  uti conforms MyFile.dat public.data --verbose\n"
+            "\n"
+            "\033[37mMore Information:\033[0m\n"
+            "  See the manual page with 'man uti'"
+        )
+    )
+    subparsers = parser.add_subparsers(dest='command', required=True, help='\033[37mSubcommands\033[0m')
 
-    if len(sys.argv) < 1:
-        show_usage()
-        exit(1)
-    
-    if '-h' in sys.argv or '--help' in sys.argv:
-        show_help()
-        exit(0)
+    # get
+    get_parser = subparsers.add_parser('get', help='Get the UTI of a file')
+    get_parser.add_argument('filepath', help='Path to file')
+    get_parser.add_argument('-s', '--show-dynamic', action='store_true', help='Show dynamic UTIs without resolving them')
 
-    if '-r' in sys.argv or '--resolve-string' in sys.argv:
-        # NOTE: The dynamic UTI should ALWAYS be the last argument provided
-        uti = sys.argv[-1]
-        if not uti.startswith("dyn.a"):
-            print("Error: Input not recognized as dynamic UTI")
-            exit(1)
-    else:
-        # NOTE: The path should ALWAYS be the last argument provided
-        path = Path(sys.argv[-1])
-        if not path.exists():
-            print("Error: Invalid Path")
-            exit(1)
-        uti = get_file_uti(path.resolve().__str__())
+    # resolve
+    resolve_parser = subparsers.add_parser('resolve', help='Resolve a dynamic UTI')
+    resolve_parser.add_argument('dynamic_uti', help='Dynamic UTI to resolve')
 
-    if uti.startswith('dyn.a'):
-        if '-s' in sys.argv or '--show-dynamic' in sys.argv:
-            print(uti)
-            exit(0)
+    # conforms
+    conforms_parser = subparsers.add_parser('conforms', help='Check UTI conformity')
+    conforms_parser.add_argument('uti_or_path', help='UTI or file path to check')
+    conforms_parser.add_argument('target_uti', help='Target UTI to check against')
+    conforms_parser.add_argument('-v', '--verbose', action='store_true', help='Show verbose output')
+
+    args = parser.parse_args()
+
+    if args.command == 'resolve':
+        if not args.dynamic_uti.startswith("dyn.a"):
+            parser.error("Input not recognized as dynamic UTI")
+        decoded_uti = decode_dynamic_uti(args.dynamic_uti)
+        fully_decoded_uti = uti_string_replace(decoded_uti)
+        print(fully_decoded_uti)
+
+    elif args.command == 'conforms':
+        path_or_uti = args.uti_or_path
+        if Path(path_or_uti).exists():
+            uti = get_file_uti(str(Path(path_or_uti).resolve()))
         else:
+            uti = path_or_uti
+
+        conforms = check_conformity(uti, args.target_uti)
+        if args.verbose:
+            if conforms:
+                print(f"'{uti}' \033[32mconforms\033[0m to '{args.target_uti}'")
+            else:
+                print(f"'{uti}' \033[31mdoes not conform\033[0m to '{args.target_uti}'")
+        
+        sys.exit(0 if conforms else 1)
+
+    elif args.command == 'get':
+        path = Path(args.filepath)
+        uti = get_file_uti(str(path.resolve()))
+
+        if uti.startswith('dyn.a') and not args.show_dynamic:
             decoded_uti = decode_dynamic_uti(uti)
             fully_decoded_uti = uti_string_replace(decoded_uti)
             print(fully_decoded_uti)
-    else:
-        print(uti)
+        else:
+            print(uti)
 
 
 if __name__ == "__main__":
