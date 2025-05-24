@@ -3,25 +3,41 @@
 uti - Uniform Type Identifier Utility
 .SH SYNOPSIS
 .B uti
-[\fIOPTIONS\fR] [\fIPATH-OR-STRING\fR]
+[\fIOPTIONS\fR] [\fIARGUMENTS\fR]
 .SH DESCRIPTION
-The \fButi\fR utility is used to lookup Uniform Type Identifiers (UTIs) and for resolving dynamic UTIs.
+The \fButi\fR utility is used to lookup file Uniform Type Identifiers (UTIs), resolving dynamic UTIs, and checking UTI conformity.
 .SH OPTIONS
 .TP
-.BR \-r ", " \-\-resolve\-string
-Interpret the final argument as a dynamic UTI and resolve it.
+.BR get
+Get the UTI of the file at the provided path.
+Dynamic UTIs will be resolved by default.
+
+Suboptions:
+    -s,  --show-dynamic    Don't resolve the UTI if dynamic
+    -h,  --help            Show help on this subcommand
 .TP
-.BR \-s ", " \-\-show\-dynamic
-Output the dynamic UTI without resolving it. If the UTI is not dynamic it will be output as is.
+.BR resolve
+Resolve a dynamic UTI string passed as an argument.
+
+Suboptions:
+    -h,  --help    Show help on this subcommand
+.TP
+.BR conforms
+Check whether one UTI conforms to another. Checks the first UTI against the second.\n
+You can provide a file path in place of the first UTI and it's UTI will be checked against the second UTI.
+
+Suboptions:
+    -v,  --verbose    Show verbose output
+    -h,  --help       Show help on this subcommand
 .TP
 .BR \-h ", " \-\-help
-Show this help message. If this flag is present, all other arguments will be ignored.
+Show a help summary. You can get help with a specific subcommand with 'uti <subcommand> -h'
 .SH EXAMPLES
-Get the UTI of the item at the provided path. Dynamic UTIs will be resolved by default
+Get the UTI of the item at the provided path.
 
 .RS
 .nf
-uti MyFile.dat
+uti get MyFile.dat
 .fi
 .RE
 
@@ -29,7 +45,7 @@ Get the UTI of the item at the provided path without resolving dynamic UTIs
 .RS
 .nf
 
-uti --show-dynamic MyFile.dat
+uti get --show-dynamic MyFile.dat
 .fi
 .RE
 
@@ -37,7 +53,23 @@ Resolve a dynamic UTI passed as an argument
 .RS
 .nf
 
-uti --resolve-string dyn.ah62d4r3qkk7dgtpyqz6hkp42fzxhe55cfvy042phqy1zuppgsm10esvvhzxhe55c
+uti resolve dyn.ah62d4r3qkk7dgtpyqz6hkp42fzxhe55cfvy042phqy1zuppgsm10esvvhzxhe55c
+.fi
+.RE
+
+Check whether one UTI conforms to another
+.RS
+.nf
+
+uti conforms public.png public.image
+.fi
+.RE
+
+Check whether the UTI of a file conforms to another UTI
+.RS
+.nf
+
+uti conforms MyFile.dat public.data
 .fi
 .RE
 .SH PROJECT
