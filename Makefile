@@ -23,10 +23,10 @@ install-shebang:
 
 install-dependencies:
 	@echo "Installing dependencies ..."
+	command -v xcrun 1>/dev/null || xcode-select --install
 	for dep in $(DEPENDENCIES); do \
 		command -v $$dep 1>/dev/null || brew install $$dep; \
 	done
-	command -v xcrun 1>/dev/null || xcode-select --install
 	@echo "Done."
 
 install-man:
