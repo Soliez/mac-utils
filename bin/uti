@@ -2,6 +2,7 @@
 
 import re
 import sys
+import objc
 import argparse
 from pathlib import Path
 from UniformTypeIdentifiers import UTType
@@ -27,14 +28,19 @@ def check_conformity(target_uti, checked_uti) -> bool:
     '''
     Determine whether one UTI conforms to another
     '''
+    target_uti_str = target_uti
+    checked_uti_str = checked_uti
     target_uti = UTType.typeWithIdentifier_(target_uti)
     checked_uti = UTType.typeWithIdentifier_(checked_uti)
     try:
         result = target_uti.conformsToType_(checked_uti)
         return result
-    except AttributeError:
-        print("Error: Unable to create type from given UTI")
-        return False
+    except (AttributeError, objc.error) as e:
+        if type(e) == AttributeError:
+            print(f"uti: Error: Unable to instantiate type from UTI string '{target_uti_str}'")
+        else:
+            print(f"uti: Error: Unable to instantiate type from UTI string '{checked_uti_str}'")
+        exit(1)
 
 
 def decode_dynamic_uti(uti: str) -> str:
