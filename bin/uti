@@ -36,7 +36,7 @@ def check_conformity(target_uti, checked_uti) -> bool:
         result = target_uti.conformsToType_(checked_uti)
         return result
     except (AttributeError, objc.error) as e:
-        if type(e) == AttributeError:
+        if isinstance(e, AttributeError):
             print(f"uti: Error: Unable to instantiate type from UTI string '{target_uti_str}'")
         else:
             print(f"uti: Error: Unable to instantiate type from UTI string '{checked_uti_str}'")
@@ -53,7 +53,7 @@ def decode_dynamic_uti(uti: str) -> str:
 
     # Validate that the UTI begins with "dyn.a"
     if not uti.startswith("dyn.a"):
-        print("Error: Input not recognized as dynamic UTI")
+        print("uti: Error: Input not recognized as dynamic UTI")
         exit(1)
 
     encoded = uti[5:] # Skip the first 5 characters ("dyn.a") and get the rest of the string
