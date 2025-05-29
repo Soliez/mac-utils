@@ -5,6 +5,7 @@ VENV_PYTHON := $(CURDIR)/venv/bin/python3
 VENV_PIP := $(CURDIR)/venv/bin/pip
 MAN_DIR := $(HOME)/man/man1
 DEPENDENCIES := exiftool jq man2html pandoc ffmpeg tree
+SHEBANG_UPDATE_QUEUE := uti
 
 .PHONY: install-dependencies install-man install-path install-venv install-shebang install uninstall-man uninstall
 
@@ -16,9 +17,11 @@ install-venv:
 	@echo "Done."
 
 install-shebang:
-	@echo "Updating shebang in uti"
-	sed -i '' "1s|.*|#!$(VENV_PYTHON)|" $(BIN_DIR)/uti
-	chmod +x $(BIN_DIR)/uti
+	@echo "Updating shebang in some scripts ..."
+	for file in $(SHEBANG_UPDATE_QUEUE); do \
+		sed -i '' "1s|.*|#!$(VENV_PYTHON)|" $(BIN_DIR)/$$file
+		chmod +x $(BIN_DIR)/$$file
+	done
 	@echo "Done."
 
 install-dependencies:
