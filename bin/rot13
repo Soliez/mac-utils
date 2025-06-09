@@ -1,0 +1,66 @@
+#!/bin/bash
+
+
+show_usage() {
+    echo "Usage: rot13 [-h, --help] <STRINGS>"
+    echo "Try 'rot13 --help' or 'man rot13' for more information"
+}
+
+
+show_help() {
+cat << EOF
+Usage: rot13 [-h, --help] <STRING>
+
+Apply a ROT13 cipher to text.
+
+ROT13 or Rotate-By-13 shifts each letter in a string by thirteen places.
+
+Options:
+    -h, --help      Show this help message
+
+Examples:
+    Apply a ROT13 cipher to one or more strings provided as an argument
+        rot13 "Hello World!"
+
+    Reverse one or more ROT13 ciphered strings provided as an argument
+        rot13 "Uryyb Jbeyq!"
+
+    Apply a ROT13 cipher to a string read from standard-in
+        echo "Hello World!" | rot13
+
+    Reverse a ROT13 ciphered string read from standard-in
+        echo "Uryyb Jbeyq!" | rot13
+EOF
+}
+
+
+rot13_encode() {
+    tr 'A-Za-z' 'N-ZA-Mn-za-m' <<< "$1"
+}
+
+
+main() {
+    if [ "$#" -eq 0 ]; then
+        text=$(cat -)
+        if [ -z "$text" ]; then
+            show_usage
+            exit 1
+        fi
+        rot13_encode "$text"
+    else
+        for arg in "$@"; do
+            case "$arg" in
+                -h|--help)
+                    show_help
+                    exit 0
+                    ;;
+                *)
+                    rot13_encode "$arg"
+                    ;;
+            esac
+        done
+    fi
+}
+
+
+main "$@"
