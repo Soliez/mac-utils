@@ -13,6 +13,9 @@ bin/esbackup
 bin/mkfs
 bin/wfmanifest-logger
 
+# Project sub-directories to be excluded
+repo-utils/
+
 
 
 # Created by https://www.toptal.com/developers/gitignore/api/macos,vim,python,dotenv,git,homebrew
