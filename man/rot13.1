@@ -1,0 +1,63 @@
+.TH ROT13 1 "Mac-Utils Repository Docs"
+.SH NAME
+rot13 - Rotate-By-13 Cipher Utility
+.SH SYNOPSIS
+.B rot13
+[\fIOPTIONS\fR] [\fIARGUMENTS\fR]
+.SH DESCRIPTION
+The \fBrot13\fR utility is used to apply a ROT13 cipher to text
+
+ROT13 or Rotate-By-13 is a substitution cipher that shifts each letter in a string by thirteen places.
+
+ROT13 is symmetrical, so performing the same operation on ciphered text will return the original string.
+.SH OPTIONS
+.TP
+.BR \-h ", " \-\-help
+Show a help summary
+.SH EXAMPLES
+Apply a ROT13 cipher to one or more strings provided as an argument
+
+.RS
+.nf
+rot13 "Hello World!"
+.fi
+.RE
+
+Reverse one or more ROT13 ciphered strings provided as an argument
+.RS
+.nf
+
+rot13 "Uryyb Jbeyq!"
+.fi
+.RE
+
+Apply a ROT13 cipher to a string read from standard-in
+.RS
+.nf
+
+echo "Hello World!" | rot13
+.fi
+.RE
+
+Reverse a ROT13 ciphered string read from standard-in
+.RS
+.nf
+
+echo "Uryyb Jbeyq!" | rot13
+.fi
+.RE
+
+Apply or Reverse a ROT13 cipher to the contents of a file
+.RS
+.nf
+
+cat MyFile.txt | rot13
+.fi
+.RE
+.SH PROJECT
+.PP
+This script is from the \fBmac-utils\fR repo on GitHub.
+.PP
+\fBmac-utils\fR is a collection of useful (mostly macOS specific) shell scripts.
+
+\fBGitHub:\fR \fIhttps://github.com/Soliez/mac-utils\fR
