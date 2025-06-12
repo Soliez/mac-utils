@@ -1,0 +1,173 @@
+#!/usr/bin/env python3
+
+import re
+import sys
+import json
+import base64
+import argparse
+import plistlib
+import subprocess
+
+
+def get_shortcut_names() -> list:
+    '''
+    Get the names of all shortcuts installed on the device as a list
+    '''
+    try:
+        process = subprocess.run(['shortcuts', 'list'], capture_output=True, text=True, check=True)
+        return process.stdout.splitlines()
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to get shortcut names: {e}")
+        sys.exit(1)
+
+
+def get_shortcut_plist(name: str) -> dict:
+    '''
+    Convert the shortcut to a XML property-list and output as a dictionary
+    
+    This function uses a external utility shortcut to convert the shortcut to a plist
+    Please ensure you have added this shortcut to your library
+
+    Shortcut to Plist Non-Interactive
+    https://www.icloud.com/shortcuts/88858e2a2e3841d781a6eda4293bf575
+    '''
+
+    utility_shortcut = "Shortcut to Plist Non-Interactive"
+    command = ['shortcuts', 'run', utility_shortcut, '-i', name, '-o', '-']
+    try:
+        process = subprocess.run(command, capture_output=True, check=True)
+        decoded_output = base64.b64decode(process.stdout)
+        return plistlib.loads(decoded_output)
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to run utility shortcut: {e}")
+        sys.exit(1)
+    except plistlib.InvalidFileException:
+        print("Failed to decode plist.")
+        sys.exit(1)
+
+
+def get_shortcut_actions(shortcut_dict: dict) -> list[dict]:
+    '''
+    Extract the actions data from the shortcut dictionary
+    '''
+    return shortcut_dict.get('WFWorkflowActions', [])
+
+
+def shortcut_exists(name: str) -> bool:
+    '''
+    Check whether a shortcut currently exists in your library
+    '''
+    return name in get_shortcut_names()
+
+
+def get_action_ids(shortcut_actions: dict) -> list[str]:
+    '''
+    Get a list of shortcut action identifiers present in the shortcut
+    '''
+    return [action['WFWorkflowActionIdentifier'] for action in shortcut_actions]
+
+
+def get_shortcut_uuid(shortcut_name: str) -> str | None:
+    '''
+    Retrieve the UUID of a shortcut by its exact name.
+    '''
+    try:
+        result = subprocess.run(
+            ['shortcuts', 'list', '--show-identifiers'],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+    except subprocess.CalledProcessError as e:
+        print(f"Error: {e}")
+        return None
+    
+    pattern = re.compile(rf'^{re.escape(shortcut_name)}\s+\(([A-Za-z0-9\-]+)\)$')
+
+    for line in result.stdout.splitlines():
+        match = pattern.match(line)
+        if match:
+            return match.group(1)
+    return None
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Siri Shortcuts Utility",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "\033[37mExamples:\033[0m\n"
+            "  shortcut-util get-actions shortcut-name\n"
+            "  shortcut-util count-actions shortcut-name\n"
+            "  shortcut-util convert shortcut-name --json\n"
+            "  shortcut-util convert shortcut-name --plist\n"
+            "  shortcut-util get-uuid shortcut-name\n"
+        )
+    )
+    subparsers = parser.add_subparsers(dest='command', required=True, help='\033[37mSubcommands\033[0m')
+
+    # get-actions parser
+    get_actions_parser = subparsers.add_parser('get-actions', help='Extract the actions from a Shortcut')
+    get_actions_parser.add_argument('name', help='The name of the Shortcut to parse')
+    get_actions_parser.add_argument('-j', '--json', action='store_true', help='Output actions in JSON format')
+    get_actions_parser.add_argument('-i', '--identifiers', action='store_true', help='Output a list of shortcut action identifiers present in the shortcut')
+
+    # count-actions parser
+    count_actions_parser = subparsers.add_parser('count-actions', help='Count the actions in a Shortcut')
+    count_actions_parser.add_argument('name', help='The name of the Shortcut')
+
+    # convert parser
+    convert_parser = subparsers.add_parser('convert', help="Convert a Shortcut to JSON or PLIST")
+    convert_parser.add_argument('name', help="The name of the Shortcut to convert")
+    convert_parser.add_argument('-j','--json', action='store_true', help="Convert the Shortcut to JSON")
+    convert_parser.add_argument('-p','--plist', action='store_true', help="Convert the Shortcut to PLIST")
+
+    # get-uuid parser
+    get_uuid_parser = subparsers.add_parser('get-uuid', help="Get the UUID of a Shortcut")
+    get_uuid_parser.add_argument('name', help="The name of the Shortcut to retrieve the UUID of")
+
+    args = parser.parse_args()
+
+    if not shortcut_exists(args.name):
+        print(f"Error: '{args.name}' does not exist in your Shortcuts library")
+        sys.exit(1)
+
+    plist = get_shortcut_plist(args.name)
+
+    # get-actions main
+    if args.command == 'get-actions':
+        actions = get_shortcut_actions(plist)
+        if args.identifiers:
+            output = get_action_ids(actions)
+        else:
+            output = actions
+            
+        if args.json:
+            print(json.dumps(output, indent=4))
+        else:
+            print(plistlib.dumps(output, fmt=plistlib.FMT_XML).decode('utf-8'))
+
+    # count-actions main
+    elif args.command == 'count-actions':
+        actions = get_shortcut_actions(plist)
+        print(len(actions))
+
+    # convert main
+    elif args.command == 'convert':
+        if args.json:
+            print(json.dumps(obj=plist, indent=4))
+        elif args.plist:
+            print(plistlib.dumps(plist, fmt=plistlib.FMT_XML).decode('utf-8'))
+
+    # get-uuid main
+    elif args.command == 'get-uuid':
+        uuid = get_shortcut_uuid(args.name)
+        if not uuid:
+            print(f"Error: UUID for '{args.name}' not found")
+            sys.exit(1)
+        print(uuid)
+
+
+
+if __name__ == "__main__":
+    main()
