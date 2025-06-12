@@ -14,6 +14,7 @@ bin/mkfs
 bin/wfmanifest-logger
 bin/histbackup
 bin/wfbackup
+bin/wfid
 
 
 # Project sub-directories to be excluded
