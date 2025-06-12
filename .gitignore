@@ -12,6 +12,9 @@ bin/applyBatch
 bin/esbackup
 bin/mkfs
 bin/wfmanifest-logger
+bin/histbackup
+bin/wfbackup
+
 
 # Project sub-directories to be excluded
 repo-utils/
