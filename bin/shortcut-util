@@ -8,6 +8,8 @@ import argparse
 import plistlib
 import subprocess
 from pathlib import Path
+from urllib.parse import urlparse
+
 
 
 def get_shortcut_names() -> list:
@@ -111,29 +113,47 @@ def open_shortcut(shortcut_name: str) -> None:
         sys.exit(1)
 
 
-def import_shortcut(path: str) -> None:
+def import_shortcut(path_or_url: str, isURL: bool = False) -> None:
     '''
-    Import a shortcut file to your Shortcuts Library
+    Import a shortcut to your Shortcuts Library via opening a shortcut file or iCloud Share URL
     '''
 
-    file = Path(path).resolve()
+    if isURL:
+        components = urlparse(path_or_url)
+        if components.netloc == 'www.icloud.com' and components.path.startswith('/shortcuts/'):
+            identifier = components.path.removeprefix('/shortcuts/')
+            import_url = f"shortcuts://shortcuts/{identifier}"
+            try:
+                subprocess.run(
+                    ['open', import_url],
+                    check=True
+                )
+            except subprocess.CalledProcessError:
+                print(f"Error: Unable to import shortcut from URL '{path_or_url}'")
+                sys.exit(1)
+        else:
+            print(f"Error: Invalid iCloud URL '{path_or_url}'")
+            print('\tThe URL should conform to the following structure: https://www.icloud.com/shortcuts/<SHORTCUT_ID>')
+            sys.exit(1)
 
-    if not file.exists():
-        print(f"Error: '{str(file)}' does not appear to exist")
-        sys.exit(1)
-    
-    if not file.is_file():
-        print(f"Error: path '{str(file)}' exists but does not appear to be a file")
-        sys.exit(1)
-    
-    try:
-        subprocess.run(
-            ['open', '-a', 'Shortcuts', str(file)],
-            check=True
-        )
-    except subprocess.CalledProcessError:
-        print(f"Error: Unable to import shortcut file '{file.name}'")
-        sys.exit(1)
+    else:
+        file = Path(path_or_url).resolve()
+        if not file.exists():
+            print(f"Error: '{str(file)}' does not appear to exist")
+            sys.exit(1)
+
+        if not file.is_file():
+            print(f"Error: path '{str(file)}' exists but does not appear to be a file")
+            sys.exit(1)
+        
+        try:
+            subprocess.run(
+                ['open', '-a', 'Shortcuts', str(file)],
+                check=True
+            )
+        except subprocess.CalledProcessError:
+            print(f"Error: Unable to import shortcut file '{file.name}'")
+            sys.exit(1)
 
 
 def main():
@@ -149,6 +169,7 @@ def main():
             "  shortcut-util get-uuid shortcut-name\n"
             "  shortcut-util open shortcut-name\n"
             "  shortcut-util import path-to-shortcut-file\n"
+            "  shortcut-util import icloud-url --url\n"
         )
     )
     subparsers = parser.add_subparsers(dest='command', required=True, help='\033[37mSubcommands\033[0m')
@@ -179,7 +200,8 @@ def main():
 
     # import parser
     import_parser = subparsers.add_parser('import', help="Import a shortcut file into your Shortcuts Library")
-    import_parser.add_argument('path', help='The path to the shortcut file to import')
+    import_parser.add_argument('path_or_url', help='The path to the shortcut file or the iCloud Share URL of the shortcut to import')
+    import_parser.add_argument('--url', action='store_true', help='Import the shortcut from an iCloud Share URL')
 
     args = parser.parse_args()
 
@@ -246,7 +268,10 @@ def main():
 
     # import main
     elif args.command == 'import':
-        import_shortcut(args.path)
+        if args.url:
+            import_shortcut(args.path_or_url, isURL=True)
+        else:
+            import_shortcut(args.path_or_url)
 
 
 
