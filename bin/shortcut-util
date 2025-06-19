@@ -156,6 +156,23 @@ def import_shortcut(path_or_url: str, isURL: bool = False) -> None:
             sys.exit(1)
 
 
+def create_shortcut() -> None:
+    '''
+    Create a new shortcut in the Shortcuts Editor
+    '''
+
+    try:
+        url = 'shortcuts://create-shortcut'
+        subprocess.run(
+            ['open', url],
+            check=True
+        )
+    except subprocess.CalledProcessError as e:
+        print(f'Error: Unable to create new shortcut\n{e}')
+        sys.exit(1)
+
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Siri Shortcuts Utility",
@@ -170,6 +187,7 @@ def main():
             "  shortcut-util open shortcut-name\n"
             "  shortcut-util import path-to-shortcut-file\n"
             "  shortcut-util import icloud-url --url\n"
+            "  shortcut-util create\n"
         )
     )
     subparsers = parser.add_subparsers(dest='command', required=True, help='\033[37mSubcommands\033[0m')
@@ -202,6 +220,9 @@ def main():
     import_parser = subparsers.add_parser('import', help="Import a shortcut file into your Shortcuts Library")
     import_parser.add_argument('path_or_url', help='The path to the shortcut file or the iCloud Share URL of the shortcut to import')
     import_parser.add_argument('--url', action='store_true', help='Import the shortcut from an iCloud Share URL')
+
+    # create parser
+    create_parser = subparsers.add_parser('create', help='Create a new shortcut in the Shortcuts Editor')
 
     args = parser.parse_args()
 
@@ -272,6 +293,10 @@ def main():
             import_shortcut(args.path_or_url, isURL=True)
         else:
             import_shortcut(args.path_or_url)
+    
+    # create main
+    elif args.command == 'create':
+        create_shortcut()
 
 
 
