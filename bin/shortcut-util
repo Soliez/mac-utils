@@ -96,7 +96,7 @@ def open_shortcut(shortcut_name: str) -> None:
     Open a shortcut in the Shortcuts editor
     '''
 
-    if shortcut_name not in get_shortcut_names():
+    if not shortcut_exists(shortcut_name):
         print(f"Error: '{shortcut_name}' does not appear to match the name of a shortcut in your library")
         sys.exit(1)
 
