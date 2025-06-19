@@ -7,6 +7,7 @@ import base64
 import argparse
 import plistlib
 import subprocess
+from pathlib import Path
 
 
 def get_shortcut_names() -> list:
@@ -110,6 +111,31 @@ def open_shortcut(shortcut_name: str) -> None:
         sys.exit(1)
 
 
+def import_shortcut(path: str) -> None:
+    '''
+    Import a shortcut file to your Shortcuts Library
+    '''
+
+    file = Path(path).resolve()
+
+    if not file.exists():
+        print(f"Error: '{str(file)}' does not appear to exist")
+        sys.exit(1)
+    
+    if not file.is_file():
+        print(f"Error: path '{str(file)}' exists but does not appear to be a file")
+        sys.exit(1)
+    
+    try:
+        subprocess.run(
+            ['open', '-a', 'Shortcuts', str(file)],
+            check=True
+        )
+    except subprocess.CalledProcessError:
+        print(f"Error: Unable to import shortcut file '{file.name}'")
+        sys.exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Siri Shortcuts Utility",
@@ -122,6 +148,7 @@ def main():
             "  shortcut-util convert shortcut-name --plist\n"
             "  shortcut-util get-uuid shortcut-name\n"
             "  shortcut-util open shortcut-name\n"
+            "  shortcut-util import path-to-shortcut-file\n"
         )
     )
     subparsers = parser.add_subparsers(dest='command', required=True, help='\033[37mSubcommands\033[0m')
@@ -150,16 +177,20 @@ def main():
     open_parser = subparsers.add_parser('open', help='Open a shortcut in the Shortcuts Editor')
     open_parser.add_argument('name', help='The name of the Shortcut to open')
 
+    # import parser
+    import_parser = subparsers.add_parser('import', help="Import a shortcut file into your Shortcuts Library")
+    import_parser.add_argument('path', help='The path to the shortcut file to import')
+
     args = parser.parse_args()
 
-    if not shortcut_exists(args.name):
-        print(f"Error: '{args.name}' does not exist in your Shortcuts library")
-        sys.exit(1)
-
-    plist = get_shortcut_plist(args.name)
 
     # get-actions main
     if args.command == 'get-actions':
+        if not shortcut_exists(args.name):
+            print(f"Error: '{args.name}' does not exist in your Shortcuts library")
+            sys.exit(1)
+
+        plist = get_shortcut_plist(args.name)
         actions = get_shortcut_actions(plist)
         if args.identifiers:
             output = get_action_ids(actions)
@@ -173,11 +204,21 @@ def main():
 
     # count-actions main
     elif args.command == 'count-actions':
+        if not shortcut_exists(args.name):
+            print(f"Error: '{args.name}' does not exist in your Shortcuts library")
+            sys.exit(1)
+
+        plist = get_shortcut_plist(args.name)
         actions = get_shortcut_actions(plist)
         print(len(actions))
 
     # convert main
     elif args.command == 'convert':
+        if not shortcut_exists(args.name):
+            print(f"Error: '{args.name}' does not exist in your Shortcuts library")
+            sys.exit(1)
+
+        plist = get_shortcut_plist(args.name)
         if args.json:
             print(json.dumps(obj=plist, indent=4))
         elif args.plist:
@@ -185,6 +226,10 @@ def main():
 
     # get-uuid main
     elif args.command == 'get-uuid':
+        if not shortcut_exists(args.name):
+            print(f"Error: '{args.name}' does not exist in your Shortcuts library")
+            sys.exit(1)
+
         uuid = get_shortcut_uuid(args.name)
         if not uuid:
             print(f"Error: UUID for '{args.name}' not found")
@@ -193,7 +238,15 @@ def main():
     
     # open main
     elif args.command == 'open':
+        if not shortcut_exists(args.name):
+            print(f"Error: '{args.name}' does not exist in your Shortcuts library")
+            sys.exit(1)
+        
         open_shortcut(args.name)
+
+    # import main
+    elif args.command == 'import':
+        import_shortcut(args.path)
 
 
 
