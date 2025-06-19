@@ -91,6 +91,25 @@ def get_shortcut_uuid(shortcut_name: str) -> str | None:
     return None
 
 
+def open_shortcut(shortcut_name: str) -> None:
+    '''
+    Open a shortcut in the Shortcuts editor
+    '''
+
+    if shortcut_name not in get_shortcut_names():
+        print(f"Error: '{shortcut_name}' does not appear to match the name of a shortcut in your library")
+        sys.exit(1)
+
+    try:
+        subprocess.run(
+            ['shortcuts', 'view', shortcut_name],
+            check=True
+        )
+    except subprocess.CalledProcessError:
+        print(f"Error: Unable to open shortcut '{shortcut_name}'")
+        sys.exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Siri Shortcuts Utility",
@@ -102,6 +121,7 @@ def main():
             "  shortcut-util convert shortcut-name --json\n"
             "  shortcut-util convert shortcut-name --plist\n"
             "  shortcut-util get-uuid shortcut-name\n"
+            "  shortcut-util open shortcut-name\n"
         )
     )
     subparsers = parser.add_subparsers(dest='command', required=True, help='\033[37mSubcommands\033[0m')
@@ -125,6 +145,10 @@ def main():
     # get-uuid parser
     get_uuid_parser = subparsers.add_parser('get-uuid', help="Get the UUID of a Shortcut")
     get_uuid_parser.add_argument('name', help="The name of the Shortcut to retrieve the UUID of")
+
+    # open parser
+    open_parser = subparsers.add_parser('open', help='Open a shortcut in the Shortcuts Editor')
+    open_parser.add_argument('name', help='The name of the Shortcut to open')
 
     args = parser.parse_args()
 
@@ -166,6 +190,10 @@ def main():
             print(f"Error: UUID for '{args.name}' not found")
             sys.exit(1)
         print(uuid)
+    
+    # open main
+    elif args.command == 'open':
+        open_shortcut(args.name)
 
 
 
