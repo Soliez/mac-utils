@@ -7,7 +7,10 @@ import base64
 import argparse
 import plistlib
 import subprocess
+from io import BytesIO
 from pathlib import Path
+from zipfile import ZipFile
+from datetime import datetime
 from urllib.parse import urlparse
 
 
@@ -202,22 +205,121 @@ def get_icloud_url(shortcut_name: str) -> str:
         sys.exit(1)
 
 
+def export_shortcuts(
+        save_dir: str,
+        names: list[str],
+        all: bool = False,
+        compressed: bool = False,
+        organize: bool = False,
+        compression_algo: str = ''
+        ) -> None:
+    '''
+    Export shortcuts from your library, optionally compressing and/or organizing them
+
+    Supported compression formats:
+        - zip
+        - tar.gz
+        - tar.bz2
+        - tar.xz
+        - tar
+        - gz
+        - cpio
+        - iso
+
+    This function uses an external utility shortcut to export the shortcuts from your library.
+    Please ensure you have added this shortcut to your library.
+
+    Export Shortcuts Non-Interactive
+    https://www.icloud.com/shortcuts/1e572591a5dd4d23850a0a6c2b289aa9
+    '''
+
+    utility_shortcut = 'Export Shortcuts Non-Interactive'
+
+    # Compression algorithims supported by the Shorcuts app
+    supported_algos = ['zip', 'tar.gz', 'tar.bz2', 'tar.xz', 'tar', 'gz', 'cpio', 'iso']
+
+    names = [name for name in names if shortcut_exists(name)]
+
+    if not all:
+        if len(names) < 1:
+            print(f"Error: No shortcuts matching the names provided were found")
+            sys.exit(1)
+    
+    if compressed:
+        if compression_algo not in supported_algos:
+            print(f"Error: '{compression_algo}' is not a supported compression algorithim ")
+            print(f"Supported Algorithims: {supported_algos}")
+            sys.exit(1)
+
+    # Create the base save directory if it doesn't already exist
+    Path(save_dir).resolve().mkdir(exist_ok=True)
+
+    # Create a subdirectory for each shortcut to be exported if it doesn't already exist in save_dir
+    if organize:
+        for name in names:
+            Path(f"{save_dir}/{name}").resolve().mkdir(exist_ok=True)
+
+    options = {
+        "names": names,
+        "all": all,
+        "compressed": compressed,
+        "compression_algo": f".{compression_algo}"
+    }
+
+    try:
+        options_json = json.dumps(options)
+        process = subprocess.run(
+            ['shortcuts', 'run', utility_shortcut, '-i', '-'],
+            input=options_json.encode('utf-8'),
+            capture_output=True,
+            check=True
+        )
+        encoded_data = process.stdout
+    except subprocess.CalledProcessError as e:
+        print(f"Error: Unable to export shortcuts\n{e}")
+        sys.exit(1)
+    
+    zip_data = base64.b64decode(encoded_data)
+    zip_buffer = BytesIO(zip_data)
+
+    creation_date = datetime.now().strftime("%Y-%m-%d")
+    if compressed:
+        if organize:
+            output_path = f"{save_dir}/Shortcut Exports/shortcuts export {creation_date}.{compression_algo}"
+        else:
+            output_path = f"{save_dir}/shortcuts export {creation_date}.{compression_algo}"
+        outpath = Path(output_path).write_bytes(zip_buffer.getvalue())
+    else:
+        with ZipFile(zip_buffer) as zip_file:
+            if organize:
+                for item in zip_file.namelist():
+                    item_name = Path(item).stem
+                    output_path = Path(f"{save_dir}/{item_name}")
+                    output_path.mkdir(parents=True, exist_ok=True)
+                    zip_file.extract(item, path=str(output_path))
+            else:
+                zip_file.extractall(path=save_dir)
+    
+
 def main():
     parser = argparse.ArgumentParser(
         description="Siri Shortcuts Utility",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "\033[37mExamples:\033[0m\n"
-            "  shortcut-util get-actions shortcut-name\n"
-            "  shortcut-util count-actions shortcut-name\n"
-            "  shortcut-util convert shortcut-name --json\n"
-            "  shortcut-util convert shortcut-name --plist\n"
-            "  shortcut-util get-uuid shortcut-name\n"
-            "  shortcut-util open shortcut-name\n"
-            "  shortcut-util import path-to-shortcut-file\n"
-            "  shortcut-util import icloud-url --url\n"
+            "  shortcut-util get-actions <shortcut-name>\n"
+            "  shortcut-util count-actions <shortcut-name>\n"
+            "  shortcut-util convert <shortcut-name> --json\n"
+            "  shortcut-util convert <shortcut-name> --plist\n"
+            "  shortcut-util get-uuid <shortcut-name>\n"
+            "  shortcut-util open <shortcut-name>\n"
+            "  shortcut-util import <path-to-shortcut-file>\n"
+            "  shortcut-util import <shortcut-share-url> --url\n"
             "  shortcut-util create\n"
-            "  shortcut-util icloud-url shortcut-name\n"
+            "  shortcut-util icloud-url <shortcut-name>\n"
+            "  shortcut-util export -n <shortcut-name> -s <save-destination>\n"
+            "  shortcut-util export --names <shortcut1> <shortcut2> --save-dir <save-destination> --organize\n"
+            "  shortcut-util export --all -s <save-destination> --compressed -algo tar.gz\n"
         )
     )
     subparsers = parser.add_subparsers(dest='command', required=True, help='\033[37mSubcommands\033[0m')
@@ -257,6 +359,16 @@ def main():
     # icloud-url parser
     icloud_url_parser = subparsers.add_parser('icloud-url', help='Create an iCloud Share URL for a shortcut in your library')
     icloud_url_parser.add_argument('name', help='The name of the shortcut to create the iCloud Share URL for')
+
+    # export parser
+    export_parser = subparsers.add_parser('export', help="Export shortcuts from your library, optionally compressing and/or organizing them into folders")
+    export_parser.add_argument('-n', '--names', nargs='+', type=str, default=[], help='The name(s) of the shortcuts to export')
+    export_parser.add_argument('-a', '--all', action='store_true', help="Export all shortcuts in your library")
+    export_parser.add_argument('-c','--compressed', action='store_true', help="Whether or not to compress the exported shortcuts")
+    export_parser.add_argument('-algo', '--compression-algorithim', type=str, default='zip', help="The compression algorithim to use: (zip, tar.gz, tar.bz2, tar.xz, tar, gz, cpio, iso)")
+    export_parser.add_argument('-o', '--organize', action='store_true', help="Whether or not to organize the exported shortcuts into folders")
+    export_parser.add_argument('-s', '--save-dir', type=str, default='.', help="The directory to save the exported shortcuts to")
+
 
     args = parser.parse_args()
 
@@ -332,6 +444,18 @@ def main():
     elif args.command == 'icloud-url':
         url = get_icloud_url(args.name)
         print(url)
+    
+    # export main
+    elif args.command == 'export':
+        export_shortcuts(
+            save_dir=args.save_dir,
+            names=args.names,
+            all=args.all,
+            compressed=args.compressed,
+            organize=args.organize,
+            compression_algo=args.compression_algorithim
+        )
+
 
 
 
