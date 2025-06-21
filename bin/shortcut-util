@@ -12,7 +12,7 @@ from io import BytesIO
 from pathlib import Path
 from zipfile import ZipFile
 from datetime import datetime
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote
 
 
 
@@ -334,6 +334,89 @@ def compare_shortcuts(name1: str, name2: str) -> None:
         print("✅ No differences detected")
 
 
+def build_shortcuts_url(
+        shortcut_name: str = '',
+        run: bool = True,
+        open: bool = False,
+        create: bool = False,
+        import_link: bool = False,
+        gallery: bool = False,
+        automations: bool = False,
+        input_type: str = 'text',
+        text: str = '',
+        x_callback: bool = False,
+        x_success_url: str = '',
+        x_cancel_url: str = '',
+        x_error_url: str = ''
+        ) -> str:
+    '''
+    Construct a shortcuts URL for running, opening, importing, and creating shortcuts.
+
+    The parameter 'input' can either be 'text' or 'clipboard'
+
+    Note:
+        Certain URL routes such as 'create', 'gallery', and 'automations' don't take any
+        parameters and cannot be used to create new shortcuts with a pre-filled name fields
+        nor can they be used navigate to specific automations or items Shortcuts gallery.
+
+        Thus for these routes, the base URL will be output
+    '''
+    
+    if create:
+        return 'shortcuts://create-shortcut'
+    
+    if gallery:
+        return 'shortcuts://gallery'
+    
+    if automations:
+        return 'shortcuts://automations'
+    
+    if open:
+        name = quote(shortcut_name, safe='')
+        return f'shortcuts://open-shortcut?name={name}'
+    
+    if import_link:
+        if not shortcut_exists(shortcut_name):
+            print(f"Error: Unable to build an import URL for a non-existent shortcut")
+            sys.exit(1)
+        else:
+            icloud_url = get_icloud_url(shortcut_name)
+            components = urlparse(icloud_url)
+            identifier = components.path.removeprefix('/shortcuts/')
+            return f"shortcuts://shortcuts/{identifier}"
+    
+    if run:
+        name = quote(shortcut_name, safe='')
+        if not x_callback:
+            # text input
+            if input_type == 'text':
+                input_text = quote(text, safe='')
+                return f"shortcuts://run-shortcut?name={name}&input={input_type}&text={input_text}"
+            # clipboard input
+            elif input_type == 'clipboard':
+                return f"shortcuts://run-shortcut?name={name}&input={input_type}"
+            # invalid input type
+            else:
+                print(f"Error: Invalid input type '{input_type}'\nAccepted input types: 'text', 'clipboard'")
+                sys.exit(1)
+        else:
+            x_success = quote(x_success_url, safe='')
+            x_cancel = quote(x_cancel_url, safe='')
+            x_error = quote(x_error_url, safe='')
+
+            # text input
+            if input_type == 'text':
+                input_text = quote(text, safe='')
+                return f"shortcuts://x-callback-url/run-shortcut?name={name}&input={input_type}&text={input_text}&x-success={x_success}&x-cancel={x_cancel}&x-error={x_error}"
+            # clipboard input
+            elif input_type == 'clipboard':
+                return f"shortcuts://x-callback-url/run-shortcut?name={name}&input={input_type}&x-success={x_success}&x-cancel={x_cancel}&x-error={x_error}"
+            # invalid input type
+            else:
+                print(f"Error: Invalid input type '{input_type}'\nAccepted input types: 'text', 'clipboard'")
+                sys.exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Siri Shortcuts Utility",
@@ -354,6 +437,13 @@ def main():
             "  shortcut-util export --names <shortcut1> <shortcut2> --save-dir <save-destination> --organize\n"
             "  shortcut-util export --all -s <save-destination> --compressed -algo tar.gz\n"
             "  shortcut-util diff <shortcut1> <shortcut2>\n"
+            "  shortcut-util build-url --run --name <shortcut-name> --type text --text 'This is some example input text'\n"
+            "  shortcut-util build-url --open --name <shortcut-name>\n"
+            "  shortcut-util build-url --run --name <shortcut-name> --type clipboard --x-callback --success <x-success-url> --cancel <x-cancel-url> --error <x-error-url>\n"
+            "  shortcut-util build-url --import-link --name <shortcut-name>\n"
+            "  shortcut-util build-url --automations\n"
+            "  shortcut-util build-url --gallery\n"
+            "  shortcut-util build-url --create\n"
         )
     )
     subparsers = parser.add_subparsers(dest='command', required=True, help='\033[37mSubcommands\033[0m')
@@ -407,6 +497,22 @@ def main():
     diff_parser = subparsers.add_parser('diff', help="Generate a unified diff of two shortcuts for comparison")
     diff_parser.add_argument('name1', type=str, help='The first shortcut to compare')
     diff_parser.add_argument('name2', type=str, help='The second shortcut to compare')
+
+    # build-url parser
+    build_url_parser = subparsers.add_parser('build-url', help="Construct a shortcuts URL for running, opening, and creating shortcuts")
+    build_url_parser.add_argument('-n', '--name', type=str, help='The name of the shortcut to build the run/open URL for')
+    build_url_parser.add_argument('-r', '--run', action='store_true', help="Build a URL for running shortcuts")
+    build_url_parser.add_argument('-o', '--open', action='store_true', help="Build a URL for opening shortcuts")
+    build_url_parser.add_argument('-c', '--create', action='store_true', help="Build a URL for opening a new shortcut in the Shortcut Editor")
+    build_url_parser.add_argument('-I', '--import-link', action='store_true', help="Build a URL for importing shortcuts into your Shortcuts Library")
+    build_url_parser.add_argument('-g','--gallery', action='store_true', help="Build a URL to open the Shortcuts Gallery")
+    build_url_parser.add_argument('-a', '--automations', action='store_true', help="Build a URL for opening the Automations tab in the Shortcuts app")
+    build_url_parser.add_argument('-t', '--type', type=str, help="The type of shortcut input. This can be either 'text' or 'clipboard'")
+    build_url_parser.add_argument('-T', '--text', type=str, help="The text to use as input to the shortcut")
+    build_url_parser.add_argument('-x', '--x-callback', action='store_true', help='Build an X-Callback-URL')
+    build_url_parser.add_argument('--success', type=str, help="The URL to open if the shortcut runs successfully")
+    build_url_parser.add_argument('--cancel', type=str, help="The URL to open if the shortcut run was cancelled")
+    build_url_parser.add_argument('--error', type=str, help="The URL to open if an error occurs while the shortcut is running")
 
 
     args = parser.parse_args()
@@ -498,6 +604,25 @@ def main():
     # diff main
     elif args.command == 'diff':
         compare_shortcuts(args.name1, args.name2)
+
+    # build-url main
+    elif args.command == 'build-url':
+        url = build_shortcuts_url(
+            shortcut_name=args.name,
+            run=args.run,
+            open=args.open,
+            create=args.create,
+            import_link=args.import_link,
+            gallery=args.gallery,
+            automations=args.automations,
+            input_type=args.type,
+            text=args.text,
+            x_callback=args.x_callback,
+            x_success_url=args.success,
+            x_cancel_url=args.cancel,
+            x_error_url=args.error
+        )
+        print(url)
 
 
 
