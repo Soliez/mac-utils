@@ -4,6 +4,7 @@ import re
 import sys
 import json
 import base64
+import difflib
 import argparse
 import plistlib
 import subprocess
@@ -27,15 +28,15 @@ def get_shortcut_names() -> list:
         sys.exit(1)
 
 
-def get_shortcut_plist(name: str) -> dict:
+def get_shortcut_plist(name: str, output_dict: bool = True) -> dict|str:
     '''
-    Convert the shortcut to a XML property-list and output as a dictionary
+    Convert the shortcut to a XML property-list and output as a dictionary or as a plist string
     
     This function uses a external utility shortcut to convert the shortcut to a plist
     Please ensure you have added this shortcut to your library
 
     Shortcut to Plist Non-Interactive
-    https://www.icloud.com/shortcuts/88858e2a2e3841d781a6eda4293bf575
+    https://www.icloud.com/shortcuts/b6eaf496eeae4eeeb76b4e355e83a641
     '''
 
     utility_shortcut = "Shortcut to Plist Non-Interactive"
@@ -43,7 +44,10 @@ def get_shortcut_plist(name: str) -> dict:
     try:
         process = subprocess.run(command, capture_output=True, check=True)
         decoded_output = base64.b64decode(process.stdout)
-        return plistlib.loads(decoded_output)
+        if output_dict:
+            return plistlib.loads(decoded_output)
+        else:
+            return decoded_output.decode('utf-8')
     except subprocess.CalledProcessError as e:
         print(f"Failed to run utility shortcut: {e}")
         sys.exit(1)
@@ -299,7 +303,36 @@ def export_shortcuts(
                     zip_file.extract(item, path=str(output_path))
             else:
                 zip_file.extractall(path=save_dir)
+
+
+def compare_shortcuts(name1: str, name2: str) -> None:
+    '''
+    Generate a unified diff of two shortcuts
+    '''
+
+    names = [name1, name2]
+    for name in names:
+        if not shortcut_exists(name):
+            print(f"Error: '{name}' does not appear to match the name of a shortcut in your library")
+            sys.exit(1)
+
+    shortcut1 = get_shortcut_plist(name1, output_dict=False).splitlines(keepends=True)
+    shortcut2 = get_shortcut_plist(name2, output_dict=False).splitlines(keepends=True)
     
+    diff = difflib.unified_diff(
+        shortcut1,shortcut2,
+        fromfile=f'{name1}.shortcut',
+        tofile=f'{name2}.shortcut',
+        lineterm=''
+    )
+
+    unified_diff = ''.join(diff)
+
+    if diff:
+        print(unified_diff)
+    else:
+        print("✅ No differences detected")
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -320,6 +353,7 @@ def main():
             "  shortcut-util export -n <shortcut-name> -s <save-destination>\n"
             "  shortcut-util export --names <shortcut1> <shortcut2> --save-dir <save-destination> --organize\n"
             "  shortcut-util export --all -s <save-destination> --compressed -algo tar.gz\n"
+            "  shortcut-util diff <shortcut1> <shortcut2>\n"
         )
     )
     subparsers = parser.add_subparsers(dest='command', required=True, help='\033[37mSubcommands\033[0m')
@@ -368,6 +402,11 @@ def main():
     export_parser.add_argument('-algo', '--compression-algorithim', type=str, default='zip', help="The compression algorithim to use: (zip, tar.gz, tar.bz2, tar.xz, tar, gz, cpio, iso)")
     export_parser.add_argument('-o', '--organize', action='store_true', help="Whether or not to organize the exported shortcuts into folders")
     export_parser.add_argument('-s', '--save-dir', type=str, default='.', help="The directory to save the exported shortcuts to")
+
+    # diff parser
+    diff_parser = subparsers.add_parser('diff', help="Generate a unified diff of two shortcuts for comparison")
+    diff_parser.add_argument('name1', type=str, help='The first shortcut to compare')
+    diff_parser.add_argument('name2', type=str, help='The second shortcut to compare')
 
 
     args = parser.parse_args()
@@ -456,6 +495,9 @@ def main():
             compression_algo=args.compression_algorithim
         )
 
+    # diff main
+    elif args.command == 'diff':
+        compare_shortcuts(args.name1, args.name2)
 
 
 
