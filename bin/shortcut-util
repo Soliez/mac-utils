@@ -120,27 +120,65 @@ def open_shortcut(shortcut_name: str) -> None:
         sys.exit(1)
 
 
+def get_icloud_url(shortcut_name: str) -> str:
+    '''
+    Create an iCloud Share URL for a shortcut in your library
+
+    This function uses an external utility shortcut to create the iCloud URL for the given shortcut.
+    Please ensure you have added this shortcut to your library.
+
+    Get iCloud URL Non-Interactive
+    https://www.icloud.com/shortcuts/2004684ce9b44a00854db22f87b1883e
+    '''
+    
+    if not shortcut_exists(shortcut_name):
+        print(f"Error: No shortcut named '{shortcut_name}' was found in your Shortcuts Library")
+        sys.exit(1)
+
+    utility_shortcut = "Get iCloud URL Non-Interactive"
+
+    try:
+        process = subprocess.run(
+            ['shortcuts', 'run', utility_shortcut, '-i', shortcut_name, '-o', '-'],
+            capture_output=True,
+            check=True
+        )
+        url = base64.b64decode(process.stdout)
+        return url.decode('utf-8').removesuffix('\n')
+    except subprocess.CalledProcessError:
+        print(f"Error: Unable to get iCloud Share URL for shortcut '{shortcut_name}'")
+        sys.exit(1)
+
+
+def get_icloud_url_identifier(icloud_url: str) -> str:
+    '''
+    Extract the unique identifier from a Shortcuts/iCloud Share URL
+    '''
+    components = urlparse(icloud_url)
+    if components.netloc == 'www.icloud.com' and components.path.startswith('/shortcuts/'):
+        identifier = components.path.removeprefix('/shortcuts/')
+        return identifier
+    else:
+        print(f"Error: Invalid iCloud URL '{icloud_url}'")
+        print('\tThe URL should conform to the following structure: https://www.icloud.com/shortcuts/<SHORTCUT_ID>')
+        sys.exit(1)
+
+        
 def import_shortcut(path_or_url: str, isURL: bool = False) -> None:
     '''
     Import a shortcut to your Shortcuts Library via opening a shortcut file or iCloud Share URL
     '''
 
     if isURL:
-        components = urlparse(path_or_url)
-        if components.netloc == 'www.icloud.com' and components.path.startswith('/shortcuts/'):
-            identifier = components.path.removeprefix('/shortcuts/')
-            import_url = f"shortcuts://shortcuts/{identifier}"
-            try:
-                subprocess.run(
-                    ['open', import_url],
-                    check=True
-                )
-            except subprocess.CalledProcessError:
-                print(f"Error: Unable to import shortcut from URL '{path_or_url}'")
-                sys.exit(1)
-        else:
-            print(f"Error: Invalid iCloud URL '{path_or_url}'")
-            print('\tThe URL should conform to the following structure: https://www.icloud.com/shortcuts/<SHORTCUT_ID>')
+        identifier = get_icloud_url_identifier(path_or_url)
+        import_url = f"shortcuts://shortcuts/{identifier}"
+        try:
+            subprocess.run(
+                ['open', import_url],
+                check=True
+            )
+        except subprocess.CalledProcessError:
+            print(f"Error: Unable to import shortcut from URL '{path_or_url}'")
             sys.exit(1)
 
     else:
@@ -176,36 +214,6 @@ def create_shortcut() -> None:
         )
     except subprocess.CalledProcessError as e:
         print(f'Error: Unable to create new shortcut\n{e}')
-        sys.exit(1)
-
-
-def get_icloud_url(shortcut_name: str) -> str:
-    '''
-    Create an iCloud Share URL for a shortcut in your library
-
-    This function uses an external utility shortcut to create the iCloud URL for the given shortcut.
-    Please ensure you have added this shortcut to your library.
-
-    Get iCloud URL Non-Interactive
-    https://www.icloud.com/shortcuts/2004684ce9b44a00854db22f87b1883e
-    '''
-    
-    if not shortcut_exists(shortcut_name):
-        print(f"Error: No shortcut named '{shortcut_name}' was found in your Shortcuts Library")
-        sys.exit(1)
-
-    utility_shortcut = "Get iCloud URL Non-Interactive"
-
-    try:
-        process = subprocess.run(
-            ['shortcuts', 'run', utility_shortcut, '-i', shortcut_name, '-o', '-'],
-            capture_output=True,
-            check=True
-        )
-        url = base64.b64decode(process.stdout)
-        return url.decode('utf-8').removesuffix('\n')
-    except subprocess.CalledProcessError:
-        print(f"Error: Unable to get iCloud Share URL for shortcut '{shortcut_name}'")
         sys.exit(1)
 
 
@@ -381,8 +389,7 @@ def build_shortcuts_url(
             sys.exit(1)
         else:
             icloud_url = get_icloud_url(shortcut_name)
-            components = urlparse(icloud_url)
-            identifier = components.path.removeprefix('/shortcuts/')
+            identifier = get_icloud_url_identifier(icloud_url)
             return f"shortcuts://shortcuts/{identifier}"
     
     if run:
