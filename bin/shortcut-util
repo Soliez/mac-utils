@@ -224,9 +224,9 @@ def export_shortcuts(
         compressed: bool = False,
         organize: bool = False,
         compression_algo: str = ''
-        ) -> None:
+    ) -> None:
     '''
-    Export shortcuts from your library, optionally compressing and/or organizing them
+    Export shortcuts from your library, optionally compressing and/or organizing them.
 
     Supported compression formats:
         - zip
@@ -239,37 +239,28 @@ def export_shortcuts(
         - iso
 
     This function uses an external utility shortcut to export the shortcuts from your library.
-    Please ensure you have added this shortcut to your library.
+    Please ensure you have added this shortcut to your library:
 
     Export Shortcuts Non-Interactive
     https://www.icloud.com/shortcuts/1e572591a5dd4d23850a0a6c2b289aa9
     '''
 
     utility_shortcut = 'Export Shortcuts Non-Interactive'
-
-    # Compression algorithims supported by the Shorcuts app
     supported_algos = ['zip', 'tar.gz', 'tar.bz2', 'tar.xz', 'tar', 'gz', 'cpio', 'iso']
 
     names = [name for name in names if shortcut_exists(name)]
 
-    if not all:
-        if len(names) < 1:
-            print(f"Error: No shortcuts matching the names provided were found")
-            sys.exit(1)
-    
-    if compressed:
-        if compression_algo not in supported_algos:
-            print(f"Error: '{compression_algo}' is not a supported compression algorithim ")
-            print(f"Supported Algorithims: {supported_algos}")
-            sys.exit(1)
+    if not all and not names:
+        print("Error: No shortcuts matching the names provided were found")
+        sys.exit(1)
 
-    # Create the base save directory if it doesn't already exist
-    Path(save_dir).resolve().mkdir(exist_ok=True)
+    if compressed and compression_algo not in supported_algos:
+        print(f"Error: '{compression_algo}' is not a supported compression algorithm")
+        print(f"Supported Algorithms: {supported_algos}")
+        sys.exit(1)
 
-    # Create a subdirectory for each shortcut to be exported if it doesn't already exist in save_dir
-    if organize:
-        for name in names:
-            Path(f"{save_dir}/{name}").resolve().mkdir(exist_ok=True)
+    save_path = Path(save_dir).resolve()
+    save_path.mkdir(parents=True, exist_ok=True)
 
     options = {
         "names": names,
@@ -290,27 +281,30 @@ def export_shortcuts(
     except subprocess.CalledProcessError as e:
         print(f"Error: Unable to export shortcuts\n{e}")
         sys.exit(1)
-    
+
     zip_data = base64.b64decode(encoded_data)
     zip_buffer = BytesIO(zip_data)
 
     creation_date = datetime.now().strftime("%Y-%m-%d")
+
     if compressed:
         if organize:
-            output_path = f"{save_dir}/Shortcut Exports/shortcuts export {creation_date}.{compression_algo}"
+            export_dir = save_path / "Shortcut Exports"
+            export_dir.mkdir(parents=True, exist_ok=True)
         else:
-            output_path = f"{save_dir}/shortcuts export {creation_date}.{compression_algo}"
-        outpath = Path(output_path).write_bytes(zip_buffer.getvalue())
+            export_dir = save_path
+        output_path = export_dir / f"shortcuts export {creation_date}.{compression_algo}"
+        output_path.write_bytes(zip_buffer.getvalue())
     else:
         with ZipFile(zip_buffer) as zip_file:
             if organize:
                 for item in zip_file.namelist():
                     item_name = Path(item).stem
-                    output_path = Path(f"{save_dir}/{item_name}")
-                    output_path.mkdir(parents=True, exist_ok=True)
-                    zip_file.extract(item, path=str(output_path))
+                    output_dir = save_path / item_name
+                    output_dir.mkdir(parents=True, exist_ok=True)
+                    zip_file.extract(item, path=output_dir)
             else:
-                zip_file.extractall(path=save_dir)
+                zip_file.extractall(path=save_path)
 
 
 def compare_shortcuts(name1: str, name2: str) -> None:
@@ -318,15 +312,14 @@ def compare_shortcuts(name1: str, name2: str) -> None:
     Generate a unified diff of two shortcuts
     '''
 
-    names = [name1, name2]
-    for name in names:
+    for name in [name1, name2]:
         if not shortcut_exists(name):
             print(f"Error: '{name}' does not appear to match the name of a shortcut in your library")
             sys.exit(1)
-
+    
     shortcut1 = get_shortcut_plist(name1, output_dict=False).splitlines(keepends=True)
     shortcut2 = get_shortcut_plist(name2, output_dict=False).splitlines(keepends=True)
-    
+
     diff = difflib.unified_diff(
         shortcut1,shortcut2,
         fromfile=f'{name1}.shortcut',
