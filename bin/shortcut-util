@@ -56,6 +56,49 @@ def get_shortcut_plist(name: str, output_dict: bool = True) -> dict|str:
         sys.exit(1)
 
 
+def save_shortcut(
+        shortcut_data: dict,
+        shortcut_name: str,
+        save_destination: str,
+        extension: str,
+        isPlist: bool = True
+        ) -> None:
+    '''
+    Save the converted shortcut to a file
+
+    Acceptable values for 'extension' include:
+        - shortcut
+        - wflow
+        - plist
+        - json
+    
+    Note: Only files with the extension '.shortcut' or '.wflow' can be signed
+    '''
+
+    valid_extensions = ['shortcut', 'wflow', 'plist', 'json']
+
+    if not extension in valid_extensions:
+        print(f"Error: Invalid extension '{extension}'.\nAcceptable extensions: {valid_extensions}")
+        sys.exit(1)
+
+    # expanduser is called just in case 'save_destination' contains an unexpanded tilde
+    save_path = Path(save_destination).expanduser().resolve()
+    
+    # Create the save directory if it doesn't already exist
+    save_path.mkdir(parents=True, exist_ok=True)
+
+    save_path = save_path / shortcut_name
+
+    if not isPlist:
+        save_path = save_path.with_suffix('.json')
+        save_path.write_bytes(json.dumps(shortcut_data).encode('utf-8'))
+    else:
+        # .shortcut and .wflow files are plists internally
+        save_path = save_path.with_suffix(f'.{extension}')
+        with open(str(save_path), 'wb') as f:
+            plistlib.dump(shortcut_data, fp=f)
+    
+
 def get_shortcut_actions(shortcut_dict: dict) -> list[dict]:
     '''
     Extract the actions data from the shortcut dictionary
@@ -427,6 +470,8 @@ def main():
             "  shortcut-util count-actions <shortcut-name>\n"
             "  shortcut-util convert <shortcut-name> --json\n"
             "  shortcut-util convert <shortcut-name> --plist\n"
+            "  shortcut-util convert <shortcut-name> --plist -s <save-destination> --file-extension shortcut\n"
+            "  shortcut-util convert <shortcut-name> --plist --save-dir <save-destination> -f wflow\n"
             "  shortcut-util get-uuid <shortcut-name>\n"
             "  shortcut-util open <shortcut-name>\n"
             "  shortcut-util import <path-to-shortcut-file>\n"
@@ -463,6 +508,8 @@ def main():
     convert_parser.add_argument('name', help="The name of the Shortcut to convert")
     convert_parser.add_argument('-j','--json', action='store_true', help="Convert the Shortcut to JSON")
     convert_parser.add_argument('-p','--plist', action='store_true', help="Convert the Shortcut to PLIST")
+    convert_parser.add_argument('-s', '--save-dir', type=str, default='.', help='The directory to save the converted shortcut to')
+    convert_parser.add_argument('-f', '--file-extension', type=str, help="The extension to associate with the saved file. This can either be 'wflow', 'shortcut', 'plist', or 'json'.\nNote: Only files with the extensions '.wflow' '.shortcut' can be signed")
 
     # get-uuid parser
     get_uuid_parser = subparsers.add_parser('get-uuid', help="Get the UUID of a Shortcut")
@@ -553,10 +600,34 @@ def main():
             sys.exit(1)
 
         plist = get_shortcut_plist(args.name)
+
         if args.json:
-            print(json.dumps(obj=plist, indent=4))
+            if args.save_dir:
+                save_shortcut(
+                    shortcut_data=plist,
+                    shortcut_name=args.name,
+                    save_destination=args.save_dir,
+                    extension='json',
+                    isPlist=False
+                )
+            else:
+                print(json.dumps(plist, indent=4))
+
         elif args.plist:
-            print(plistlib.dumps(plist, fmt=plistlib.FMT_XML).decode('utf-8'))
+            if args.save_dir:
+                if not args.file_extension:
+                    ext = 'plist'
+                else:
+                    ext = args.file_extension  
+                save_shortcut(
+                    shortcut_data=plist,
+                    shortcut_name=args.name,
+                    save_destination=args.save_dir,
+                    extension=ext,
+                    isPlist=True
+                )
+            else:
+                print(plistlib.dumps(plist, fmt=plistlib.FMT_XML).decode('utf-8'))
 
     # get-uuid main
     elif args.command == 'get-uuid':
