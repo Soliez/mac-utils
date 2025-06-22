@@ -460,9 +460,49 @@ def build_shortcuts_url(
                 sys.exit(1)
 
 
+def sign_shortcut(
+        input_path: str,
+        output_path: str,
+        signing_mode: str = 'anyone',
+        add_to_library: bool = False
+        ) -> None:
+    '''
+    Sign a shortcut plist file (i.e, '.wflow', '.shortcut', '.plist') and output a signed shortcut ready for import
+    '''
+    
+    # expanduser is called just in case either path contains an unexpanded tilde
+    input_file = Path(input_path).expanduser().resolve()
+    output_file = Path(output_path).expanduser().resolve()
+    
+
+    if not input_file.exists():
+        print(f"Error: Invalid path '{input_file.__str__()}'")
+        sys.exit(1)
+
+    if input_file.suffix == '.plist':
+        input_file = input_file.rename(input_file.with_stem('.wflow'))
+
+    try:
+        process = subprocess.run(
+            ['shortcuts', 'sign', '-i', str(input_file), '-m', signing_mode, '-o', str(output_file)],
+            check=True,
+            stderr=subprocess.DEVNULL
+        )
+        if not output_file.exists():
+            print(f"Error: Unable to sign '{input_file.__str__()}'")
+            sys.exit(1)
+
+        if add_to_library:
+            import_shortcut(str(output_file))
+    except subprocess.CalledProcessError as e:
+        print(f"Error: Unable to sign '{input_file.__str__()}'")
+        print(e.args)
+        sys.exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Siri Shortcuts Utility",
+        description="Apple Shortcuts Utility",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "\033[37mExamples:\033[0m\n"
@@ -489,6 +529,8 @@ def main():
             "  shortcut-util build-url --automations\n"
             "  shortcut-util build-url --gallery\n"
             "  shortcut-util build-url --create\n"
+            "  shortcut-util sign -i <input-plist-path> -m people-who-know-me -o <output-shortcut-path>\n"
+            "  shortcut-util sign --input <input-plist-path> --signing-mode anyone --output <output-shortcut-path> --add-to-library\n"
         )
     )
     subparsers = parser.add_subparsers(dest='command', required=True, help='\033[37mSubcommands\033[0m')
@@ -560,6 +602,13 @@ def main():
     build_url_parser.add_argument('--success', type=str, help="The URL to open if the shortcut runs successfully")
     build_url_parser.add_argument('--cancel', type=str, help="The URL to open if the shortcut run was cancelled")
     build_url_parser.add_argument('--error', type=str, help="The URL to open if an error occurs while the shortcut is running")
+
+    # sign parser
+    sign_parser = subparsers.add_parser('sign', help="Sign a shortcut plist file and output a signed shortcut")
+    sign_parser.add_argument('-i', '--input', type=str, help='The path to the shortcut plist file. Acceptable file-extensions: (.shortcut, .wflow, .plist)')
+    sign_parser.add_argument('-m', '--signing-mode',type=str, default='anyone', help='Whether to sign the shortcut for anyone to use, or for personal use (only you and people who have you in their contacts will be able to use it)')
+    sign_parser.add_argument('-o', '--output', type=str, help='The path to save the signed shortcut to')
+    sign_parser.add_argument('-L', '--add-to-library', action='store_true', help='Whether to import the signed shortcut to your Shortcuts Library after processing')
 
 
     args = parser.parse_args()
@@ -694,6 +743,25 @@ def main():
             x_error_url=args.error
         )
         print(url)
+
+    # sign main
+    elif args.command == 'sign':
+        valid_modes = ['anyone','people-who-know-me']
+        if args.signing_mode not in valid_modes:
+            print(f"Error: Invalid signing mode '{args.signing_mode}'.\nAcceptable values for '--signing-mode: {valid_modes}")
+            sys.exit(1)
+
+        if args.add_to_library:
+            add_to_library = True
+        else:
+            add_to_library = False
+        
+        sign_shortcut(
+            input_path=args.input,
+            output_path=args.output,
+            signing_mode=args.signing_mode,
+            add_to_library=add_to_library
+        )
 
 
 
