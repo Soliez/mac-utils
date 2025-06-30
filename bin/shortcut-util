@@ -557,35 +557,66 @@ def is_valid_UDID(identifier: str) -> bool:
 
 def build_predicate(
     subsystem_category: Optional[str] = None,
-    include_events: Optional[list[Literal['info', 'debug', 'error', 'warning', 'signpost', 'loss', 'trace', 'activity', 'transition', 'state', 'timesync', 'userAction']]] = None
+    sender_image: Optional[str] = None,
+    process_name: Optional[str] = None,
+    include_events: Optional[list[Literal['info', 'debug', 'error', 'fault', 'signpost', 'loss', 'trace', 'activity', 'transition', 'state', 'timesync', 'userAction']]] = None
     ) -> str:
     '''
     Build a predicate for filtering shortcut logs
     '''
-    predicate = 'subsystem == "com.apple.shortcuts"'
+    base_predicate = 'subsystem == "com.apple.shortcuts"'
 
     if subsystem_category:
-        predicate = ' AND '.join([predicate, f'category == "{subsystem_category}"'])
+        base_predicate += f' AND category == "{subsystem_category}"'
+
+    if sender_image:
+        base_predicate += f' AND sender == "{sender_image}"'
     
-    filters = {
+    if process_name:
+        base_predicate += f' AND process == "{process_name}"'
+
+    event_type_filters = {
         'activity': 'eventType == activityCreateEvent',
         'transition': 'eventType == activityTransitionEvent',
         'state': 'eventType == stateEvent',
         'timesync': 'eventType == timesyncEvent',
         'userAction': 'eventType == userActionEvent',
-        'info': 'eventType == logEvent',
-        'debug': 'messageType == debug',
-        'error': 'messageType == error',
-        'warning': 'messageType == warning',
         'signpost': 'eventType == signpostEvent',
         'loss': 'eventType == lossEvent',
-        'trace': 'evenType == traceEvent'
+        'trace': 'eventType == traceEvent'
     }
-    
+
+    message_type_filters = {
+        'info': 'messageType == info',
+        'default': 'messageType == default',
+        'debug': 'messageType == debug',
+        'error': 'messageType == error',
+        'fault': 'messageType == fault'
+    }
+
+    event_filters_selected = []
+    message_filters_selected = []
+
     if include_events:
-        event_filter = f"({' OR '.join([filters[event] for event in include_events if event in filters])})"
-        predicate = ' AND '.join([predicate, event_filter])
-    
+        for event in include_events:
+            if event in event_type_filters:
+                event_filters_selected.append(event_type_filters[event])
+            elif event in message_type_filters:
+                message_filters_selected.append(message_type_filters[event])
+
+    combined_filters = []
+
+    if event_filters_selected:
+        combined_filters.append('(' + ' OR '.join(event_filters_selected) + ')')
+
+    if message_filters_selected:
+        combined_filters.append('(' + ' OR '.join(message_filters_selected) + ')')
+
+    if combined_filters:
+        predicate = f"{base_predicate} AND {' AND '.join(combined_filters)}"
+    else:
+        predicate = base_predicate
+
     return predicate
 
 
@@ -682,7 +713,7 @@ def export_shortcut_logs(
             sys.exit(1)
     
     try:
-        print("Creating a new logarchive ... This may take a while")
+        print("Creating a new logarchive ... This could take a long time")
         subprocess.run(
             command,
             check=True,
@@ -706,9 +737,10 @@ def stream_shortcut_logs(
     Stream events from the Shortcuts subsystem log, optionally filtering the formatting the output
      
     Optional filters:
-        - process (either a process name or PID)
-        - subsystem category (e.g, "General", "Database", "Editor", "Workflow", "XPCEvent", ...) # NOTE: As well as many other options not listed here
-        - events and log levels (e.g, 'info', 'debug', 'error', 'warning', 'signpost', 'loss', 'trace', 'activity', 'transition', 'state', 'timesync', 'userAction')
+        - process (either a process name or PID) (e.g, "Shortcuts", "BackgroundShortcutRunner", "Shortcut Events", ...)
+        - subsystem category (e.g, "General", "Database", "Dialog", "Editor", "Workflow", "WorkflowExecution", "XPCEvent", ...) # NOTE: As well as many other options not listed here
+        - sender image name (e.g, "WorkflowKit", "VoiceShortcuts", "ContentKit", ...)
+        - events and log levels (e.g, 'info', 'debug', 'error', 'fault', 'signpost', 'loss', 'trace', 'activity', 'transition', 'state', 'timesync', 'userAction')
         - include source symbols and line numbers when available
 
     Output formatting:
@@ -783,9 +815,10 @@ def view_shortcuts_logs(
         - time interval (e.g, "5m", "3h", "1d", or "boot" for minutes, hours, days, and since last reboot respectively)
         - start date/time (acceptable formats "YYYY-MM-DD", "YYYY-MM-DD HH:MM:SS", "YYYY-MM-DD HH:MM:SSZZZZZ")
         - end date/time (acceptable formats "YYYY-MM-DD", "YYYY-MM-DD HH:MM:SS", "YYYY-MM-DD HH:MM:SSZZZZZ")
-        - process (either a process name or PID)
-        - subsystem category (e.g, "General", "Database", "Editor", "Workflow", "XPCEvent", ...) # NOTE: As well as many other options not listed here
-        - events and log levels (e.g, 'info', 'debug', 'error', 'warning', 'signpost', 'loss', 'trace', 'activity', 'transition', 'state', 'timesync', 'userAction')
+        - process (either a process name or PID) (e.g, "Shortcuts", "BackgroundShortcutRunner", "Shortcut Events", ...)
+        - sender image name (e.g, "WorkflowKit", "VoiceShortcuts", "ContentKit", ...)
+        - subsystem category (e.g, "General", "Database", "Dialog", "Editor", "Workflow", "WorkflowExecution", "XPCEvent", ...) # NOTE: As well as many other options not listed here
+        - events and log levels (e.g, 'info', 'debug', 'error', 'fault', 'signpost', 'loss', 'trace', 'activity', 'transition', 'state', 'timesync', 'userAction')
         - include source symbols and line numbers when available
 
     Optional output formatting:
@@ -887,6 +920,12 @@ def main():
             "  shortcut-util build-url --create\n"
             "  shortcut-util sign -i <input-plist-path> -m people-who-know-me -o <output-shortcut-path>\n"
             "  shortcut-util sign --input <input-plist-path> --signing-mode anyone --output <output-shortcut-path> --add-to-library\n"
+            "  shortcut-util logs view --last 10h\n"
+            "  shortcut-util logs view --last 10h --process BackgroundShortcutRunner --sender WorkflowKit --category Workflow --format json\n"
+            "  shortcut-util logs stream --timeout 5m\n"
+            "  shortcut-util logs stream --timeout 2m --format compact --include info debug error fault userAction\n"
+            "  shortcut-util logs export --last 24h --output ~/Shortcut Logs.logarchive\n"
+            '  shortcut-util logs export --last 24h --process Shortcuts --device-name "Bob\'s iPhone" --output ~/Shortcut Logs.logarchive\n'
         )
     )
     subparsers = parser.add_subparsers(dest='command', required=True, help='\033[37mSubcommands\033[0m')
@@ -977,21 +1016,23 @@ def main():
     view_parser.add_argument('--last', type=str, help="View log events from the given time interval. (e.g, 20m, 4h, 2d, boot for minutes, hours, days and the time since last reboot respectively)")
     view_parser.add_argument('--start', type=str, help="View events from the given start date on (acceptable formats YYYY-MM-DD, YYYY-MM-DD HH:MM:SS, YYYY-MM-DD HH:MM:SSZZZZZ)")
     view_parser.add_argument('--end', type=str, help="View events until the given end date. Requires --start (acceptable formats YYYY-MM-DD, YYYY-MM-DD HH:MM:SS, YYYY-MM-DD HH:MM:SSZZZZZ)")
-    view_parser.add_argument('--process', type=str, help='View log events created by a specific process (process-name or PID)')
+    view_parser.add_argument('--process', type=str, help='View log events created by a specific process (process-name or PID) (e.g, "Shortcuts", "BackgroundShortcutRunner", "Shortcut Events", ...)')
     view_parser.add_argument('--format', type=str, help='log format (e.g, "default", "compact", "json", "ndjson", "syslog")')
     view_parser.add_argument('--source', action='store_true', help="Include line numbers and symbols when available")
-    view_parser.add_argument('--include', type=str, nargs='+', help="Include events and log levels (e.g, 'info', 'debug', 'error', 'warning', 'signpost', 'loss', 'trace', 'activity', 'transition', 'state', 'timesync', 'userAction')")
-    view_parser.add_argument('--category', type=str, help="The Shortcuts subsystem category (for example, 'General', 'Database', 'Editor', 'Workflow', 'XPCEvent', ...) As well as many other options not listed here")
+    view_parser.add_argument('--include', type=str, nargs='+', help="Include events and log levels (e.g, 'info', 'debug', 'error', 'fault', 'signpost', 'loss', 'trace', 'activity', 'transition', 'state', 'timesync', 'userAction')")
+    view_parser.add_argument('--category', type=str, help="The Shortcuts subsystem category (for example, 'General', 'Database', 'Dialog', 'Editor', 'Workflow', 'WorkflowExecution', 'XPCEvent', ...) As well as many other options not listed here")
+    view_parser.add_argument('--sender', type=str, help='The sender image name (e.g, "WorkflowKit", "VoiceShortcuts", "ContentKit", ...)')
 
     # stream logs subparser
     stream_parser = logs_subparsers.add_parser('stream', help="Stream Shortcuts logs, optionally filtering them")
     stream_parser.add_argument('--color', action='store_true', help="Show colored output")
-    stream_parser.add_argument('--process', type=str, help='Include only log events created by a specific process (process-name or PID)')
+    stream_parser.add_argument('--process', type=str, help='Include only log events created by a specific process (process-name or PID) (e.g, "Shortcuts", "BackgroundShortcutRunner", "Shortcut Events", ...)')
     stream_parser.add_argument('--format', type=str, help='log format (e.g, "default", "compact", "json", "syslog")')
     stream_parser.add_argument('--timeout', type=str, help="Exit after the given time interval has elapsed (e.g, 20m, 4h, 2d, boot for minutes, hours, and days respectively)")
     stream_parser.add_argument('--source', action='store_true', help="Include line numbers and symbols when available")
-    stream_parser.add_argument('--include', type=str, nargs='+', help="Include events and log levels (e.g, 'info', 'debug', 'error', 'warning', 'signpost', 'loss', 'trace', 'activity', 'transition', 'state', 'timesync', 'userAction')")
-    stream_parser.add_argument('--category', type=str, help="The Shortcuts subsystem category (for example, 'General', 'Database', 'Editor', 'Workflow', 'XPCEvent', ...) As well as many other options not listed here")
+    stream_parser.add_argument('--include', type=str, nargs='+', help="Include events and log levels (e.g, 'info', 'debug', 'error', 'fault', 'signpost', 'loss', 'trace', 'activity', 'transition', 'state', 'timesync', 'userAction')")
+    stream_parser.add_argument('--category', type=str, help="The Shortcuts subsystem category (for example, 'General', 'Database', 'Dialog', 'Editor', 'Workflow', 'WorkflowExecution', 'XPCEvent', ...) As well as many other options not listed here")
+    stream_parser.add_argument('--sender', type=str, help='The sender image name (e.g, "WorkflowKit", "VoiceShortcuts", "ContentKit", ...)')
 
     # export logs parser
     export_logs_parser = logs_subparsers.add_parser('export', help='Export Shortcut logs to a logarchive, optionally filtering them')
@@ -1003,8 +1044,10 @@ def main():
     export_logs_parser.add_argument('--first-device', action='store_true', help="Export logs from the first paired device found")
     export_logs_parser.add_argument('--device-name', type=str, help="Export logs from a paired device with the given name")
     export_logs_parser.add_argument('--UDID', type=str, help="Export logs from a paired device with the given UDID")
-    export_logs_parser.add_argument('--include', type=str, nargs='+', help="Include events and log levels (e.g, 'info', 'debug', 'error', 'warning', 'signpost', 'loss', 'trace', 'activity', 'transition', 'state', 'timesync', 'userAction')")
-    export_logs_parser.add_argument('--category', type=str, help="The Shortcuts subsystem category (for example, 'General', 'Database', 'Editor', 'Workflow', 'XPCEvent', ...) As well as many other options not listed here")
+    export_logs_parser.add_argument('--include', type=str, nargs='+', help="Include events and log levels (e.g, 'info', 'debug', 'error', 'fault', 'signpost', 'loss', 'trace', 'activity', 'transition', 'state', 'timesync', 'userAction')")
+    export_logs_parser.add_argument('--process', type=str, help="Include log events created by a specific process (process name only)")
+    export_logs_parser.add_argument('--category', type=str, help="The Shortcuts subsystem category (for example, 'General', 'Database', 'Dialog', 'Editor', 'Workflow', 'WorkflowExecution', 'XPCEvent', ...) As well as many other options not listed here")
+    export_logs_parser.add_argument('--sender', type=str, help='The sender image name (e.g, "WorkflowKit", "VoiceShortcuts", "ContentKit", ...)')
 
     args = parser.parse_args()
 
@@ -1159,7 +1202,12 @@ def main():
 
     # logs main
     elif args.command == 'logs':
-        predicate = build_predicate(args.category, args.include)
+        predicate = build_predicate(
+            subsystem_category=args.category,
+            process_name=args.process,
+            sender_image=args.sender,
+            include_events=args.include
+        )
         if args.logs_command == "view":
             view_shortcuts_logs(
                 predicate,
