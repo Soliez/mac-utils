@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 
+import os
 import re
 import sys
+import pty
 import json
 import base64
 import difflib
@@ -13,6 +15,7 @@ from pathlib import Path
 from zipfile import ZipFile
 from datetime import datetime
 from urllib.parse import urlparse, quote
+from typing import Literal, Optional, Union
 
 
 
@@ -61,6 +64,7 @@ def save_shortcut(
         shortcut_name: str,
         save_destination: str,
         extension: str,
+        valid_extensions: Literal['shortcut', 'wflow', 'plist', 'json'] = 'shortcut',
         isPlist: bool = True
         ) -> None:
     '''
@@ -74,8 +78,6 @@ def save_shortcut(
     
     Note: Only files with the extension '.shortcut' or '.wflow' can be signed
     '''
-
-    valid_extensions = ['shortcut', 'wflow', 'plist', 'json']
 
     if not extension in valid_extensions:
         print(f"Error: Invalid extension '{extension}'.\nAcceptable extensions: {valid_extensions}")
@@ -266,7 +268,8 @@ def export_shortcuts(
         all: bool = False,
         compressed: bool = False,
         organize: bool = False,
-        compression_algo: str = ''
+        compression_algo: Optional[str] = None,
+        supported_algos: Literal['zip', 'tar.gz', 'tar.bz2', 'tar.xz', 'tar', 'gz', 'cpio', 'iso'] = 'zip'
     ) -> None:
     '''
     Export shortcuts from your library, optionally compressing and/or organizing them.
@@ -289,7 +292,6 @@ def export_shortcuts(
     '''
 
     utility_shortcut = 'Export Shortcuts Non-Interactive'
-    supported_algos = ['zip', 'tar.gz', 'tar.bz2', 'tar.xz', 'tar', 'gz', 'cpio', 'iso']
 
     names = [name for name in names if shortcut_exists(name)]
 
@@ -336,7 +338,7 @@ def export_shortcuts(
             export_dir.mkdir(parents=True, exist_ok=True)
         else:
             export_dir = save_path
-        output_path = export_dir / f"shortcuts export {creation_date}.{compression_algo}"
+        output_path = export_dir / f"Shortcuts export {creation_date}.{compression_algo}"
         output_path.write_bytes(zip_buffer.getvalue())
     else:
         with ZipFile(zip_buffer) as zip_file:
@@ -379,7 +381,7 @@ def compare_shortcuts(name1: str, name2: str) -> None:
 
 
 def build_shortcuts_url(
-        shortcut_name: str = '',
+        shortcut_name: Optional[str] = None,
         run: bool = True,
         open: bool = False,
         create: bool = False,
@@ -387,11 +389,11 @@ def build_shortcuts_url(
         gallery: bool = False,
         automations: bool = False,
         input_type: str = 'text',
-        text: str = '',
+        text: Optional[str] = None,
         x_callback: bool = False,
-        x_success_url: str = '',
-        x_cancel_url: str = '',
-        x_error_url: str = ''
+        x_success_url: Optional[str] = None,
+        x_cancel_url: Optional[str] = None,
+        x_error_url: Optional[str] = None
         ) -> str:
     '''
     Construct a shortcuts URL for running, opening, importing, and creating shortcuts.
@@ -463,7 +465,7 @@ def build_shortcuts_url(
 def sign_shortcut(
         input_path: str,
         output_path: str,
-        signing_mode: str = 'anyone',
+        signing_mode: Literal['anyone', 'people-who-know-me'] = 'anyone',
         add_to_library: bool = False
         ) -> None:
     '''
@@ -507,8 +509,356 @@ def sign_shortcut(
         sys.exit(1)
 
 
+def is_valid_time_interval(interval: str) -> bool:
+    '''
+    Validate that the given time interval is in a valid format used by the log command
+
+    Examples of valid intervals:
+        - 10m  # 10 minutes
+        - 4h   # 4 hours
+        - 2d   # 2 days
+    '''
+    result = re.search(r'^[0-9]+[mhd]{1}$', interval)
+    return True if result else False
+
+
+def is_valid_timestamp(timestamp: str) -> bool:
+    '''
+    Validate that the given start or end time strings are in valid datetime formats used by the log command
+
+    Valid formats:
+        - YYYY-MM-DD
+        - YYYY-MM-DD HH:MM:SS
+        - YYYY-MM-DD HH:MM:SSZZZZZ
+    '''
+    result = re.search(r'\b\d{4}-\d{2}-\d{2}(?:[ ]\d{2}:\d{2}:\d{2}(?:[+-]\d{4})?)?\b', timestamp)
+    return True if result else False
+
+
+def is_valid_export_size(size: str) -> bool:
+    '''
+    Validate that the given export size string is in a valid format used by the log command
+
+    Examples of valid sizes:
+        - 100k  # 100 kilobytes
+        - 20m   # 20 megabytes
+    '''
+    result = re.search(r'^[0-9]+[km]{1}$', size)
+    return True if result else False
+
+
+def is_valid_UDID(identifier: str) -> bool:
+    '''
+    Validate that the given device UDID is valid. Supports old and new style UDIDs
+    '''
+    result = re.search(r'\b(?:[a-f0-9]{40}|[0-9a-fA-F]{8}-[0-9a-fA-F]{16})\b', identifier)
+    return True if result else False
+
+
+def build_predicate(
+    subsystem_category: Optional[str] = None,
+    include_events: Optional[list[Literal['info', 'debug', 'error', 'warning', 'signpost', 'loss', 'trace', 'activity', 'transition', 'state', 'timesync', 'userAction']]] = None
+    ) -> str:
+    '''
+    Build a predicate for filtering shortcut logs
+    '''
+    predicate = 'subsystem == "com.apple.shortcuts"'
+
+    if subsystem_category:
+        predicate = ' AND '.join([predicate, f'category == "{subsystem_category}"'])
+    
+    filters = {
+        'activity': 'eventType == activityCreateEvent',
+        'transition': 'eventType == activityTransitionEvent',
+        'state': 'eventType == stateEvent',
+        'timesync': 'eventType == timesyncEvent',
+        'userAction': 'eventType == userActionEvent',
+        'info': 'eventType == logEvent',
+        'debug': 'messageType == debug',
+        'error': 'messageType == error',
+        'warning': 'messageType == warning',
+        'signpost': 'eventType == signpostEvent',
+        'loss': 'eventType == lossEvent',
+        'trace': 'evenType == traceEvent'
+    }
+    
+    if include_events:
+        event_filter = f"({' OR '.join([filters[event] for event in include_events if event in filters])})"
+        predicate = ' AND '.join([predicate, event_filter])
+    
+    return predicate
+
+
+def process_with_environment(command, environment) -> None:
+    '''
+    Spawn a process in a pseudo-terminal environment.
+    Used to show colored output in the 'logs' subcommand.
+    '''
+    pid, descriptor = pty.fork()
+    if pid == 0:
+        os.execvpe(command[0], command, environment)
+    else:
+        try:
+            while True:
+                output = os.read(descriptor, 1024)
+                if not output:
+                    break
+                sys.stdout.buffer.write(output)
+                sys.stdout.buffer.flush()
+        except OSError:
+            pass
+
+
+def export_shortcut_logs(
+    predicate: str,
+    output_path: str,
+    time_interval: Optional[str] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    log_size: Optional[str] = None,
+    from_first_paired_device: bool = False,
+    device_name: Optional[str] = None,
+    device_udid: Optional[str] = None,
+    ) -> None:
+    '''
+    Export shortcut logs from this device or a paired device to a new logarchive, optionally filtering the logs
+    '''
+
+    command = ['log', 'collect', '--predicate', predicate]
+
+    save_path = Path(output_path).expanduser().resolve()
+
+    if save_path.suffix:
+        if save_path.suffix != '.logarchive':
+            print(f"Error: Invalid export path '{str(output_path)}'")
+            print("Output path must either be a directory or have the suffix .logarchive")
+            sys.exit(1)
+        else:
+            command += ['--output', str(save_path)]
+    else:
+        save_path.mkdir(parents=True, exist_ok=True)
+        filename = f"Shortcuts logs {datetime.now().strftime("%Y-%m-%d")}.logarchive"
+        save_path = save_path / filename 
+        command += ['--output', str(save_path)]
+
+    if time_interval:
+        if not is_valid_time_interval(time_interval):
+            print(f"Warning: Invalid time interval '{time_interval}'. Ignoring ...")
+        else:
+            command += ['--last', time_interval]    
+
+    if start:
+        if not is_valid_timestamp(start):
+            print(f"Warning: Invalid timestamp '{start}'. Ignoring ...")
+        else:
+            command += ['--start', start]
+
+        if end:
+            if not is_valid_timestamp(end):
+                print(f"Warning: Invalid timestamp '{end}'. Ignoring ...")
+            else:
+                command += ['--end', end]
+
+    if log_size:
+        if not is_valid_export_size(log_size):
+            # Exit if a log size is provided but is invalid
+            print(f"Error: Invalid export size '{log_size}'")
+            sys.exit(1)
+        else:
+            command += ['--size', log_size]
+    
+    if from_first_paired_device:
+        command += '--device'
+    
+    if device_name:
+        command += ['--device-name', device_name]
+    
+    if device_udid:
+        if is_valid_UDID(device_udid):
+            command += ['--device-udid', device_udid]
+        else:
+            # Exit if a UDID is provided but is invalid
+            print(f"Error: Invalid UDID '{device_udid}'")
+            sys.exit(1)
+    
+    try:
+        print("Creating a new logarchive ... This may take a while")
+        subprocess.run(
+            command,
+            check=True,
+            stderr=subprocess.DEVNULL
+        )
+    except subprocess.CalledProcessError as e:
+        print(f"Error while running command '{command}'")
+        print(e)
+        sys.exit(1)
+
+
+def stream_shortcut_logs(
+    predicate: str,
+    show_color: bool = True,
+    process: Optional[Union[str, int]] = None,
+    log_format: Literal['default', 'compact', 'json', 'syslog'] = 'default',
+    timeout: Optional[str] = None,
+    include_source: bool = False,
+    ) -> None:
+    '''
+    Stream events from the Shortcuts subsystem log, optionally filtering the formatting the output
+     
+    Optional filters:
+        - process (either a process name or PID)
+        - subsystem category (e.g, "General", "Database", "Editor", "Workflow", "XPCEvent", ...) # NOTE: As well as many other options not listed here
+        - events and log levels (e.g, 'info', 'debug', 'error', 'warning', 'signpost', 'loss', 'trace', 'activity', 'transition', 'state', 'timesync', 'userAction')
+        - include source symbols and line numbers when available
+
+    Output formatting:
+        - colored output
+        - log format (e.g, "default", "compact", "json", "syslog")
+    '''
+
+    log_formats = ['default', 'compact', 'json', 'syslog']
+    
+    colorable_formats = ['default', 'compact']
+
+    command = ['log', 'stream', '--predicate', predicate]
+    
+    if process is not None:
+        command += ['--process', process]
+
+    if include_source:
+        command += '--source'
+
+    if log_format and log_format in log_formats:
+        command += ['--style', log_format]
+    else:
+        command += ['--style', 'default']   
+    
+    if show_color:
+        if log_format not in colorable_formats:
+            command += ['--color', 'none']
+        command += ['--color', 'always']
+
+    if timeout:
+        if not is_valid_time_interval(timeout):
+            # Exit if a timeout was provided but was invalid so the process dosen't run in the background forever
+            print(f"Error: Invalid timeout interval '{timeout}'.")
+            sys.exit(1)
+        else:
+            command += ['--timeout', timeout]
+    
+    try:
+        env = os.environ.copy()
+        env.update({
+        'TERM': 'xterm-256color',
+        'CLICOLOR_FORCE': '1',
+        'CLICOLOR': '1'
+        })
+        print("Streaming logs... Press Ctrl+C to stop.\n")
+        process_with_environment(command, environment=env)
+    except KeyboardInterrupt:
+        # The user manually stopped the stream with Ctrl+C
+        print('\nStopping stream ...')
+        sys.exit()
+    except Exception as e:
+        print(f"Error while running command: '{command}'")
+        print(e)
+        sys.exit(1)
+
+
+def view_shortcuts_logs(
+    predicate: str,
+    show_color: bool = True,
+    from_archive: Optional[str] = None,
+    time_interval: Optional[str] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    process: Optional[Union[str, int]] = None,
+    include_source: bool = False,
+    log_format: Literal['default', 'compact', 'json', 'ndjson', 'syslog'] = 'default',
+) -> None:
+    '''
+    View events from the Shortcuts subsystem log, optionally filtering and formatting the output
+     
+    Optional filters:
+        - time interval (e.g, "5m", "3h", "1d", or "boot" for minutes, hours, days, and since last reboot respectively)
+        - start date/time (acceptable formats "YYYY-MM-DD", "YYYY-MM-DD HH:MM:SS", "YYYY-MM-DD HH:MM:SSZZZZZ")
+        - end date/time (acceptable formats "YYYY-MM-DD", "YYYY-MM-DD HH:MM:SS", "YYYY-MM-DD HH:MM:SSZZZZZ")
+        - process (either a process name or PID)
+        - subsystem category (e.g, "General", "Database", "Editor", "Workflow", "XPCEvent", ...) # NOTE: As well as many other options not listed here
+        - events and log levels (e.g, 'info', 'debug', 'error', 'warning', 'signpost', 'loss', 'trace', 'activity', 'transition', 'state', 'timesync', 'userAction')
+        - include source symbols and line numbers when available
+
+    Optional output formatting:
+        - colored output
+        - log format (e.g, "default", "compact", "json", "ndjson", "syslog")
+    '''
+
+    log_formats = ['default', 'compact', 'json', 'ndjson', 'syslog']
+
+    colorable_formats = ['default', 'compact']
+
+    command = ['log', 'show', '--predicate', predicate]
+
+    if process is not None:
+        command += ['--process', process]
+
+    if include_source:
+        command += '--source'
+
+    if log_format and log_format in log_formats:
+        command += ['--style', log_format]
+    else:
+        command += ['--style', 'default']
+    
+    if show_color:
+        if log_format not in colorable_formats:
+            command += ['--color', 'none']
+        command += ['--color', 'always']
+    
+    if time_interval:
+        if not is_valid_time_interval(time_interval) and not time_interval == 'boot':
+            print(f"Warning: Invalid time interval '{time_interval}'. Ignoring ...")
+        else:
+            command += ['--last', time_interval]
+    
+    if start:
+        if not is_valid_timestamp(start):
+            print(f"Warning: Invalid timestamp '{start}'. Ignoring ...")
+        else:
+            command += ['--start', start]
+
+        if end:
+            if not is_valid_timestamp(end):
+                print(f"Warning: Invalid timestamp '{end}'. Ignoring ...")
+            else:
+                command += ['--end', end]
+
+    if from_archive:
+        archive_path = Path(from_archive).resolve()
+        if not archive_path.exists() or not archive_path.suffix == '.logarchive':
+            # Exit here since the user explicitly wants to view logs from a logarchive and the path is invalid
+            print(f"Error: Invalid logarchive path '{str(archive_path)}'")
+            sys.exit(1)
+        command += ['--archive', str(archive_path)]
+    
+    try:
+        env = os.environ.copy()
+        env.update({
+        'TERM': 'xterm-256color',
+        'CLICOLOR_FORCE': '1',
+        'CLICOLOR': '1'
+        })
+        process_with_environment(command, environment=env)
+    except Exception as e:
+        print(f"Error running command: '{command}'")
+        print(e)
+        sys.exit(1)
+
+
+
 def main():
     parser = argparse.ArgumentParser(
+        prog='shortcut-util',
         description="Apple Shortcuts Utility",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
@@ -617,6 +967,45 @@ def main():
     sign_parser.add_argument('-o', '--output', type=str, help='The path to save the signed shortcut to')
     sign_parser.add_argument('-L', '--add-to-library', action='store_true', help='Whether to import the signed shortcut to your Shortcuts Library after processing')
 
+    # logs parser
+    logs_parser = subparsers.add_parser('logs', help="View, stream or export Shortcuts logs")
+    logs_subparsers = logs_parser.add_subparsers(dest='logs_command', required=True)
+
+    # view logs subparser
+    view_parser = logs_subparsers.add_parser('view', help="View Shortcuts logs, optionally filtering them")
+    view_parser.add_argument('--color', action='store_true', help="Show colored output")
+    view_parser.add_argument('--from-archive', type=str, help="View matching logs in a logarchive")
+    view_parser.add_argument('--last', type=str, help="View log events from the given time interval. (e.g, 20m, 4h, 2d, boot for minutes, hours, days and the time since last reboot respectively)")
+    view_parser.add_argument('--start', type=str, help="View events from the given start date on (acceptable formats YYYY-MM-DD, YYYY-MM-DD HH:MM:SS, YYYY-MM-DD HH:MM:SSZZZZZ)")
+    view_parser.add_argument('--end', type=str, help="View events until the given end date. Requires --start (acceptable formats YYYY-MM-DD, YYYY-MM-DD HH:MM:SS, YYYY-MM-DD HH:MM:SSZZZZZ)")
+    view_parser.add_argument('--process', type=str, help='View log events created by a specific process (process-name or PID)')
+    view_parser.add_argument('--format', type=str, help='log format (e.g, "default", "compact", "json", "ndjson", "syslog")')
+    view_parser.add_argument('--source', action='store_true', help="Include line numbers and symbols when available")
+    view_parser.add_argument('--include', type=str, nargs='+', help="Include events and log levels (e.g, 'info', 'debug', 'error', 'warning', 'signpost', 'loss', 'trace', 'activity', 'transition', 'state', 'timesync', 'userAction')")
+    view_parser.add_argument('--category', type=str, help="The Shortcuts subsystem category (for example, 'General', 'Database', 'Editor', 'Workflow', 'XPCEvent', ...) As well as many other options not listed here")
+
+    # stream logs subparser
+    stream_parser = logs_subparsers.add_parser('stream', help="Stream Shortcuts logs, optionally filtering them")
+    stream_parser.add_argument('--color', action='store_true', help="Show colored output")
+    stream_parser.add_argument('--process', type=str, help='Include only log events created by a specific process (process-name or PID)')
+    stream_parser.add_argument('--format', type=str, help='log format (e.g, "default", "compact", "json", "syslog")')
+    stream_parser.add_argument('--timeout', type=str, help="Exit after the given time interval has elapsed (e.g, 20m, 4h, 2d, boot for minutes, hours, and days respectively)")
+    stream_parser.add_argument('--source', action='store_true', help="Include line numbers and symbols when available")
+    stream_parser.add_argument('--include', type=str, nargs='+', help="Include events and log levels (e.g, 'info', 'debug', 'error', 'warning', 'signpost', 'loss', 'trace', 'activity', 'transition', 'state', 'timesync', 'userAction')")
+    stream_parser.add_argument('--category', type=str, help="The Shortcuts subsystem category (for example, 'General', 'Database', 'Editor', 'Workflow', 'XPCEvent', ...) As well as many other options not listed here")
+
+    # export logs parser
+    export_logs_parser = logs_subparsers.add_parser('export', help='Export Shortcut logs to a logarchive, optionally filtering them')
+    export_logs_parser.add_argument('-o', '--output', type=str, help="The path to save the created logarchive to")
+    export_logs_parser.add_argument('--last', type=str, help="Include log events from the given time interval. (e.g, 20m, 4h, 2d for minutes, hours, and days respectively)")
+    export_logs_parser.add_argument('--start', type=str, help="Include events from the given start date on (acceptable formats YYYY-MM-DD, YYYY-MM-DD HH:MM:SS, YYYY-MM-DD HH:MM:SSZZZZZ)")    
+    export_logs_parser.add_argument('--end', type=str, help="Include events until the given end date. Requires --start (acceptable formats YYYY-MM-DD, YYYY-MM-DD HH:MM:SS, YYYY-MM-DD HH:MM:SSZZZZZ)")
+    export_logs_parser.add_argument('--size', type=str, help="The size to the limit the logarchive to (acceptable formats: 100k, 20m for kilobytes and megabytes respectively)")
+    export_logs_parser.add_argument('--first-device', action='store_true', help="Export logs from the first paired device found")
+    export_logs_parser.add_argument('--device-name', type=str, help="Export logs from a paired device with the given name")
+    export_logs_parser.add_argument('--UDID', type=str, help="Export logs from a paired device with the given UDID")
+    export_logs_parser.add_argument('--include', type=str, nargs='+', help="Include events and log levels (e.g, 'info', 'debug', 'error', 'warning', 'signpost', 'loss', 'trace', 'activity', 'transition', 'state', 'timesync', 'userAction')")
+    export_logs_parser.add_argument('--category', type=str, help="The Shortcuts subsystem category (for example, 'General', 'Database', 'Editor', 'Workflow', 'XPCEvent', ...) As well as many other options not listed here")
 
     args = parser.parse_args()
 
@@ -755,7 +1144,7 @@ def main():
     elif args.command == 'sign':
         valid_modes = ['anyone','people-who-know-me']
         if args.signing_mode not in valid_modes:
-            print(f"Error: Invalid signing mode '{args.signing_mode}'.\nAcceptable values for '--signing-mode: {valid_modes}")
+            print(f"Error: Invalid signing mode '{args.signing_mode}'.\nAcceptable signing modes: {valid_modes}")
             sys.exit(1)
 
         if args.add_to_library:
@@ -769,6 +1158,44 @@ def main():
             signing_mode=args.signing_mode,
             add_to_library=add_to_library
         )
+
+    # logs main
+    elif args.command == 'logs':
+        predicate = build_predicate(args.category, args.include)
+        if args.logs_command == "view":
+            view_shortcuts_logs(
+                predicate,
+                show_color=args.color,
+                from_archive=args.from_archive,
+                time_interval=args.last,
+                start=args.start,
+                end=args.end,
+                process=args.process,
+                include_source=args.source,
+                log_format=args.format
+            )
+        elif args.logs_command == "stream":
+            stream_shortcut_logs(
+                predicate,
+                show_color=args.color,
+                process=args.process,
+                log_format=args.format,
+                timeout=args.timeout,
+                include_source=args.source
+            )
+        elif args.logs_command == "export":
+            export_shortcut_logs(
+                predicate,
+                output_path=args.output,
+                time_interval=args.last,
+                start=args.start,
+                end=args.end,
+                log_size=args.size,
+                from_first_paired_device=args.first_device,
+                device_name=args.device_name,
+                device_udid=args.UDID
+            )
+
 
 
 
