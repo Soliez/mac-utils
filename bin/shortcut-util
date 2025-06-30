@@ -589,18 +589,18 @@ def build_predicate(
     return predicate
 
 
-def process_with_environment(command, environment) -> None:
+def process_with_environment(command: list[str], environment: dict) -> None:
     '''
     Spawn a process in a pseudo-terminal environment.
     Used to show colored output in the 'logs' subcommand.
     '''
-    pid, descriptor = pty.fork()
+    pid, file_descriptor = pty.fork()
     if pid == 0:
         os.execvpe(command[0], command, environment)
     else:
         try:
             while True:
-                output = os.read(descriptor, 1024)
+                output = os.read(file_descriptor, 1024)
                 if not output:
                     break
                 sys.stdout.buffer.write(output)
@@ -855,7 +855,6 @@ def view_shortcuts_logs(
         sys.exit(1)
 
 
-
 def main():
     parser = argparse.ArgumentParser(
         prog='shortcut-util',
@@ -1008,7 +1007,6 @@ def main():
     export_logs_parser.add_argument('--category', type=str, help="The Shortcuts subsystem category (for example, 'General', 'Database', 'Editor', 'Workflow', 'XPCEvent', ...) As well as many other options not listed here")
 
     args = parser.parse_args()
-
 
     # get-actions main
     if args.command == 'get-actions':
@@ -1195,7 +1193,6 @@ def main():
                 device_name=args.device_name,
                 device_udid=args.UDID
             )
-
 
 
 
