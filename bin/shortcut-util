@@ -765,7 +765,7 @@ def export_shortcut_logs(
             command.extend(['--size', log_size])
     
     if from_first_paired_device:
-        command.extend('--device')
+        command.extend(['--device'])
     
     if device_name:
         command.extend(['--device-name', device_name])
