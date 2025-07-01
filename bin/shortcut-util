@@ -127,7 +127,7 @@ def get_shortcut_uuid(shortcut_name: str) -> str | None:
     Retrieve the UUID of a shortcut by its exact name.
     '''
     try:
-        result = subprocess.run(
+        process = subprocess.run(
             ['shortcuts', 'list', '--show-identifiers'],
             capture_output=True,
             text=True,
@@ -139,7 +139,7 @@ def get_shortcut_uuid(shortcut_name: str) -> str | None:
     
     pattern = re.compile(rf'^{re.escape(shortcut_name)}\s+\(([A-Za-z0-9\-]+)\)$')
 
-    for line in result.stdout.splitlines():
+    for line in process.stdout.splitlines():
         match = pattern.match(line)
         if match:
             return match.group(1)
@@ -507,6 +507,72 @@ def sign_shortcut(
         print(f"Error: Unable to sign '{input_file.__str__()}'")
         print(' '.join(e.args))
         sys.exit(1)
+
+
+def run_shortcut(
+    shortcut_name: str,
+    shortcut_input: Optional[str] = None,
+    input_is_file: bool = False,
+    shortcut_output: Optional[str] = None,
+    output_uti: Optional[str] = None
+) -> None:
+    '''
+    Run a shortcut, optionally providing input and/or specifying an output destination.
+
+    Parameters:
+    - shortcut_name: The name or UUID of a Shortcut.
+    - shortcut_input: File path, '-' for stdin, or literal string input.
+    - input_is_file: If True, treat shortcut_input as a file path.
+    - shortcut_output: File path to write output, or '-' for stdout.
+    - output_uti: Uniform Type Identifier (UTI) of output type.
+    '''
+    command = ['shortcuts', 'run', shortcut_name]
+
+    process_input = None
+
+    if shortcut_input:
+        command.extend(['-i', '-'])
+
+        if input_is_file:
+            input_path = Path(shortcut_input).expanduser().resolve()
+            if not input_path.exists():
+                print(f"Error: Input file '{input_path}' not found.", file=sys.stderr)
+                sys.exit(1)
+            process_input = input_path.read_bytes()
+        elif shortcut_input == '-':
+            process_input = sys.stdin.buffer.read()
+        else:
+            process_input = shortcut_input.encode('utf-8')
+
+    if shortcut_output:
+        if shortcut_output == '-':
+            command.extend(['-o', '-'])
+        else:
+            output_path = Path(shortcut_output).expanduser().resolve()
+            command.extend(['-o', str(output_path)])
+
+        if output_uti:
+            command.extend(['--output-type', output_uti])
+
+    try:
+        process = subprocess.run(
+            command,
+            input=process_input,
+            capture_output=True,
+            check=True
+        )
+
+        if shortcut_output == '-' or not shortcut_output:
+            if process.stdout:
+                sys.stdout.buffer.write(process.stdout)
+                sys.stdout.buffer.flush()
+        if process.stderr:
+            print(process.stderr.decode('utf-8'), file=sys.stderr)
+
+    except subprocess.CalledProcessError as e:
+        print(f"Command '{' '.join(command)}' failed with error code {e.returncode}", file=sys.stderr)
+        print(e.stderr.decode('utf-8'), file=sys.stderr)
+        sys.exit(e.returncode)
 
 
 def is_valid_time_interval(interval: str) -> bool:
@@ -895,6 +961,9 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "\033[37mExamples:\033[0m\n"
+            "  shortcut-util run -n 'My Shortcut' -i 'Some Data'\n"
+            "  cat MyFile.txt | shortcut-util run -n 'My Shortcut' -i - -o -\n"
+            "  shortcut-util run -n 'My Shortcut' -i 'MyFile.json' -o 'MyResult.plist' --output-uti 'com.apple.property-list'\n"
             "  shortcut-util get-actions <shortcut-name>\n"
             "  shortcut-util count-actions <shortcut-name>\n"
             "  shortcut-util convert <shortcut-name> --json\n"
@@ -1004,6 +1073,14 @@ def main():
     sign_parser.add_argument('-m', '--signing-mode',type=str, default='anyone', help='Whether to sign the shortcut for anyone to use, or for personal use (only you and people who have you in their contacts will be able to use it)')
     sign_parser.add_argument('-o', '--output', type=str, help='The path to save the signed shortcut to')
     sign_parser.add_argument('-L', '--add-to-library', action='store_true', help='Whether to import the signed shortcut to your Shortcuts Library after processing')
+
+    # run parser
+    run_parser = subparsers.add_parser('run', help="Run a Shortcut in your library")
+    run_parser.add_argument('-n', '--name', type=str, help="The name or UUID of the shortcut to run")
+    run_parser.add_argument('-i', '--input', type=str, help="The input to provide to the shortcut. Use '-' to read from stdin")
+    run_parser.add_argument('--file', action='store_true', help="Treat the input argument as a file")
+    run_parser.add_argument('-o', '--output', type=str, help="The output destination. Can either be a file path or '-' to write the output to stdout")
+    run_parser.add_argument('--output-uti', type=str, help="The Uniform Type Identifier to output the data in")
 
     # logs parser
     logs_parser = subparsers.add_parser('logs', help="View, stream or export Shortcuts logs")
@@ -1198,6 +1275,16 @@ def main():
             output_path=args.output,
             signing_mode=args.signing_mode,
             add_to_library=add_to_library
+        )
+    
+    # run main
+    elif args.command == 'run':
+        run_shortcut(
+            shortcut_name=args.name,
+            shortcut_input=args.input,
+            input_is_file=args.file,
+            shortcut_output=args.output,
+            output_uti=args.output_uti
         )
 
     # logs main
