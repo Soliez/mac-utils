@@ -731,30 +731,30 @@ def export_shortcut_logs(
             print("Output path must either be a directory or have the suffix .logarchive")
             sys.exit(1)
         else:
-            command += ['--output', str(save_path)]
+            command.extend(['--output', str(save_path)])
     else:
         save_path.mkdir(parents=True, exist_ok=True)
         filename = f"Shortcuts logs {datetime.now().strftime("%Y-%m-%d")}.logarchive"
         save_path = save_path / filename 
-        command += ['--output', str(save_path)]
+        command.extend(['--output', str(save_path)])
 
     if time_interval:
         if not is_valid_time_interval(time_interval):
             print(f"Warning: Invalid time interval '{time_interval}'. Ignoring ...")
         else:
-            command += ['--last', time_interval]    
+            command.extend(['--last', time_interval])
 
     if start:
         if not is_valid_timestamp(start):
             print(f"Warning: Invalid timestamp '{start}'. Ignoring ...")
         else:
-            command += ['--start', start]
+            command.extend(['--start', start])
 
         if end:
             if not is_valid_timestamp(end):
                 print(f"Warning: Invalid timestamp '{end}'. Ignoring ...")
             else:
-                command += ['--end', end]
+                command.extend(['--end', end])
 
     if log_size:
         if not is_valid_export_size(log_size):
@@ -762,17 +762,17 @@ def export_shortcut_logs(
             print(f"Error: Invalid export size '{log_size}'")
             sys.exit(1)
         else:
-            command += ['--size', log_size]
+            command.extend(['--size', log_size])
     
     if from_first_paired_device:
-        command += '--device'
+        command.extend('--device')
     
     if device_name:
-        command += ['--device-name', device_name]
+        command.extend(['--device-name', device_name])
     
     if device_udid:
         if is_valid_UDID(device_udid):
-            command += ['--device-udid', device_udid]
+            command.extend(['--device-udid', device_udid])
         else:
             # Exit if a UDID is provided but is invalid
             print(f"Error: Invalid UDID '{device_udid}'")
@@ -821,20 +821,20 @@ def stream_shortcut_logs(
     command = ['log', 'stream', '--predicate', predicate]
     
     if process is not None:
-        command += ['--process', process]
+        command.extend(['--process', process])
 
     if include_source:
-        command += '--source'
+        command.extend(['--source'])
 
     if log_format and log_format in log_formats:
-        command += ['--style', log_format]
+        command.extend(['--style', log_format])
     else:
-        command += ['--style', 'default']   
+        command.extend(['--style', 'default'])
     
     if show_color:
         if log_format not in colorable_formats:
-            command += ['--color', 'none']
-        command += ['--color', 'always']
+            command.extend(['--color', 'none'])
+        command.extend(['--color', 'always'])
 
     if timeout:
         if not is_valid_time_interval(timeout):
@@ -842,7 +842,7 @@ def stream_shortcut_logs(
             print(f"Error: Invalid timeout interval '{timeout}'.")
             sys.exit(1)
         else:
-            command += ['--timeout', timeout]
+            command.extend(['--timeout', timeout])
     
     try:
         env = os.environ.copy()
@@ -899,38 +899,38 @@ def view_shortcuts_logs(
     command = ['log', 'show', '--predicate', predicate]
 
     if process is not None:
-        command += ['--process', process]
+        command.extend(['--process', process])
 
     if include_source:
-        command += '--source'
+        command.extend(['--source'])
 
     if log_format and log_format in log_formats:
-        command += ['--style', log_format]
+        command.extend(['--style', log_format])
     else:
-        command += ['--style', 'default']
+        command.extend(['--style', 'default'])
     
     if show_color:
         if log_format not in colorable_formats:
-            command += ['--color', 'none']
-        command += ['--color', 'always']
+            command.extend(['--color', 'none'])
+        command.extend(['--color', 'always'])
     
     if time_interval:
         if not is_valid_time_interval(time_interval) and not time_interval == 'boot':
             print(f"Warning: Invalid time interval '{time_interval}'. Ignoring ...")
         else:
-            command += ['--last', time_interval]
+            command.extend(['--last', time_interval])
     
     if start:
         if not is_valid_timestamp(start):
             print(f"Warning: Invalid timestamp '{start}'. Ignoring ...")
         else:
-            command += ['--start', start]
+            command.extend(['--start', start])
 
         if end:
             if not is_valid_timestamp(end):
                 print(f"Warning: Invalid timestamp '{end}'. Ignoring ...")
             else:
-                command += ['--end', end]
+                command.extend(['--end', end])
 
     if from_archive:
         archive_path = Path(from_archive).resolve()
@@ -938,7 +938,7 @@ def view_shortcuts_logs(
             # Exit here since the user explicitly wants to view logs from a logarchive and the path is invalid
             print(f"Error: Invalid logarchive path '{str(archive_path)}'")
             sys.exit(1)
-        command += ['--archive', str(archive_path)]
+        command.extend(['--archive', str(archive_path)])
     
     try:
         env = os.environ.copy()
