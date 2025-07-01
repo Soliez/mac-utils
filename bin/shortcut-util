@@ -1014,7 +1014,7 @@ def main():
     convert_parser.add_argument('name', help="The name of the Shortcut to convert")
     convert_parser.add_argument('-j','--json', action='store_true', help="Convert the Shortcut to JSON")
     convert_parser.add_argument('-p','--plist', action='store_true', help="Convert the Shortcut to PLIST")
-    convert_parser.add_argument('-s', '--save-dir', type=str, default='.', help='The directory to save the converted shortcut to')
+    convert_parser.add_argument('-s', '--save-dir', type=str, help='The directory to save the converted shortcut to')
     convert_parser.add_argument('-f', '--file-extension', type=str, help="The extension to associate with the saved file. This can either be 'wflow', 'shortcut', 'plist', or 'json'.\nNote: Only files with the extensions '.wflow' '.shortcut' can be signed")
 
     # get-uuid parser
