@@ -23,12 +23,15 @@ def get_shortcut_names() -> list:
     '''
     Get the names of all shortcuts installed on the device as a list
     '''
+    command = ['shortcuts', 'list']
     try:
-        process = subprocess.run(['shortcuts', 'list'], capture_output=True, text=True, check=True)
+        process = subprocess.run(command, capture_output=True, text=True, check=True)
         return process.stdout.splitlines()
     except subprocess.CalledProcessError as e:
-        print(f"Failed to get shortcut names: {e}")
-        sys.exit(1)
+        print("Failed to get shortcut names\n")
+        print(f"Command '{' '.join(command)}' failed with error code {e.returncode}", file=sys.stderr)
+        print(e.stderr.decode('utf-8'), file=sys.stderr)
+        sys.exit(e.returncode)
 
 
 def get_shortcut_plist(name: str, output_dict: bool = True) -> dict|str:
@@ -52,8 +55,10 @@ def get_shortcut_plist(name: str, output_dict: bool = True) -> dict|str:
         else:
             return decoded_output.decode('utf-8')
     except subprocess.CalledProcessError as e:
-        print(f"Failed to run utility shortcut: {e}")
-        sys.exit(1)
+        print(f"Failed to run utility shortcut '{utility_shortcut}'\n")
+        print(f"Command '{' '.join(command)}' failed with error code {e.returncode}", file=sys.stderr)
+        print(e.stderr.decode('utf-8'), file=sys.stderr)
+        sys.exit(e.returncode)
     except plistlib.InvalidFileException:
         print("Failed to decode plist.")
         sys.exit(1)
@@ -64,7 +69,6 @@ def save_shortcut(
         shortcut_name: str,
         save_destination: str,
         extension: str,
-        valid_extensions: Literal['shortcut', 'wflow', 'plist', 'json'] = 'shortcut',
         isPlist: bool = True
         ) -> None:
     '''
@@ -78,6 +82,8 @@ def save_shortcut(
     
     Note: Only files with the extension '.shortcut' or '.wflow' can be signed
     '''
+
+    valid_extensions = ['shortcut', 'wflow', 'plist', 'json']
 
     if not extension in valid_extensions:
         print(f"Error: Invalid extension '{extension}'.\nAcceptable extensions: {valid_extensions}")
@@ -122,20 +128,22 @@ def get_action_ids(shortcut_actions: dict) -> list[str]:
     return [action['WFWorkflowActionIdentifier'] for action in shortcut_actions]
 
 
-def get_shortcut_uuid(shortcut_name: str) -> str | None:
+def get_shortcut_uuid(shortcut_name: str) -> str:
     '''
     Retrieve the UUID of a shortcut by its exact name.
     '''
+    command = ['shortcuts', 'list', '--show-identifiers']
     try:
         process = subprocess.run(
-            ['shortcuts', 'list', '--show-identifiers'],
+            command,
             capture_output=True,
             text=True,
             check=True
         )
     except subprocess.CalledProcessError as e:
-        print(f"Error: {e}")
-        return None
+        print(f"Command '{' '.join(command)}' failed with error code {e.returncode}", file=sys.stderr)
+        print(e.stderr.decode('utf-8'), file=sys.stderr)
+        sys.exit(e.returncode)
     
     pattern = re.compile(rf'^{re.escape(shortcut_name)}\s+\(([A-Za-z0-9\-]+)\)$')
 
@@ -155,14 +163,18 @@ def open_shortcut(shortcut_name: str) -> None:
         print(f"Error: '{shortcut_name}' does not appear to match the name of a shortcut in your library")
         sys.exit(1)
 
+    command = ['shortcuts', 'view', shortcut_name]
+
     try:
         subprocess.run(
-            ['shortcuts', 'view', shortcut_name],
+            command,
             check=True
         )
-    except subprocess.CalledProcessError:
-        print(f"Error: Unable to open shortcut '{shortcut_name}'")
-        sys.exit(1)
+    except subprocess.CalledProcessError as e:
+        print(f"Error: Unable to open shortcut '{shortcut_name}'\n")
+        print(f"Command '{' '.join(command)}' failed with error code {e.returncode}", file=sys.stderr)
+        print(e.stderr.decode('utf-8'), file=sys.stderr)
+        sys.exit(e.returncode)
 
 
 def get_icloud_url(shortcut_name: str) -> str:
@@ -181,18 +193,21 @@ def get_icloud_url(shortcut_name: str) -> str:
         sys.exit(1)
 
     utility_shortcut = "Get iCloud URL Non-Interactive"
+    command = ['shortcuts', 'run', utility_shortcut, '-i', shortcut_name, '-o', '-']
 
     try:
         process = subprocess.run(
-            ['shortcuts', 'run', utility_shortcut, '-i', shortcut_name, '-o', '-'],
+            command,
             capture_output=True,
             check=True
         )
         url = base64.b64decode(process.stdout)
         return url.decode('utf-8').removesuffix('\n')
-    except subprocess.CalledProcessError:
-        print(f"Error: Unable to get iCloud Share URL for shortcut '{shortcut_name}'")
-        sys.exit(1)
+    except subprocess.CalledProcessError as e:
+        print(f"Error: Unable to get iCloud Share URL for shortcut '{shortcut_name}'\n")
+        print(f"Command '{' '.join(command)}' failed with error code {e.returncode}", file=sys.stderr)
+        print(e.stderr.decode('utf-8'), file=sys.stderr)
+        sys.exit(e.returncode)
 
 
 def get_icloud_url_identifier(icloud_url: str) -> str:
@@ -217,14 +232,18 @@ def import_shortcut(path_or_url: str, isURL: bool = False) -> None:
     if isURL:
         identifier = get_icloud_url_identifier(path_or_url)
         import_url = f"shortcuts://shortcuts/{identifier}"
+
+        command = ['open', import_url]
         try:
             subprocess.run(
-                ['open', import_url],
+                command,
                 check=True
             )
-        except subprocess.CalledProcessError:
-            print(f"Error: Unable to import shortcut from URL '{path_or_url}'")
-            sys.exit(1)
+        except subprocess.CalledProcessError as e:
+            print(f"Error: Unable to import shortcut from URL '{path_or_url}'\n")
+            print(f"Command '{' '.join(command)}' failed with error code {e.returncode}", file=sys.stderr)
+            print(e.stderr.decode('utf-8'), file=sys.stderr)
+            sys.exit(e.returncode)
 
     else:
         file = Path(path_or_url).resolve()
@@ -236,14 +255,18 @@ def import_shortcut(path_or_url: str, isURL: bool = False) -> None:
             print(f"Error: path '{str(file)}' exists but does not appear to be a file")
             sys.exit(1)
         
+        command = ['open', '-a', 'Shortcuts', str(file)]
         try:
             subprocess.run(
-                ['open', '-a', 'Shortcuts', str(file)],
+                command,
                 check=True
             )
-        except subprocess.CalledProcessError:
-            print(f"Error: Unable to import shortcut file '{file.name}'")
-            sys.exit(1)
+        except subprocess.CalledProcessError as e:
+            print(f"Error: Unable to import shortcut file '{file.name}'\n")
+            print(f"Command '{' '.join(command)}' failed with error code {e.returncode}", file=sys.stderr)
+            print(e.stderr.decode('utf-8'), file=sys.stderr)
+            sys.exit(e.returncode)
+            
 
 
 def create_shortcut() -> None:
@@ -253,13 +276,16 @@ def create_shortcut() -> None:
 
     try:
         url = 'shortcuts://create-shortcut'
+        command = ['open', url]
         subprocess.run(
-            ['open', url],
+            command,
             check=True
         )
     except subprocess.CalledProcessError as e:
-        print(f'Error: Unable to create new shortcut\n{e}')
-        sys.exit(1)
+        print(f'Error: Unable to create new shortcut\n')
+        print(f"Command '{' '.join(command)}' failed with error code {e.returncode}", file=sys.stderr)
+        print(e.stderr.decode('utf-8'), file=sys.stderr)
+        sys.exit(e.returncode)
 
 
 def export_shortcuts(
@@ -268,8 +294,7 @@ def export_shortcuts(
         all: bool = False,
         compressed: bool = False,
         organize: bool = False,
-        compression_algo: Optional[str] = None,
-        supported_algos: Literal['zip', 'tar.gz', 'tar.bz2', 'tar.xz', 'tar', 'gz', 'cpio', 'iso'] = 'zip'
+        compression_algo: Optional[str] = None
     ) -> None:
     '''
     Export shortcuts from your library, optionally compressing and/or organizing them.
@@ -293,6 +318,8 @@ def export_shortcuts(
 
     utility_shortcut = 'Export Shortcuts Non-Interactive'
 
+    supported_algos = ['zip', 'tar.gz', 'tar.bz2', 'tar.xz', 'tar', 'gz', 'cpio', 'iso']
+
     names = [name for name in names if shortcut_exists(name)]
 
     if not all and not names:
@@ -315,17 +342,20 @@ def export_shortcuts(
     }
 
     try:
+        command = ['shortcuts', 'run', utility_shortcut, '-i', '-']
         options_json = json.dumps(options)
         process = subprocess.run(
-            ['shortcuts', 'run', utility_shortcut, '-i', '-'],
+            command,
             input=options_json.encode('utf-8'),
             capture_output=True,
             check=True
         )
         encoded_data = process.stdout
     except subprocess.CalledProcessError as e:
-        print(f"Error: Unable to export shortcuts\n{e}")
-        sys.exit(1)
+        print("Error: Unable to export shortcuts\n")
+        print(f"Command '{' '.join(command)}' failed with error code {e.returncode}", file=sys.stderr)
+        print(e.stderr.decode('utf-8'), file=sys.stderr)
+        sys.exit(e.returncode)
 
     zip_data = base64.b64decode(encoded_data)
     zip_buffer = BytesIO(zip_data)
@@ -487,8 +517,9 @@ def sign_shortcut(
         input_file = input_file.rename(input_file.with_suffix('.wflow'))
 
     try:
+        command = ['shortcuts', 'sign', '-i', str(input_file), '-m', signing_mode, '-o', str(output_file)]
         process = subprocess.run(
-            ['shortcuts', 'sign', '-i', str(input_file), '-m', signing_mode, '-o', str(output_file)],
+            command,
             check=True,
             stderr=subprocess.DEVNULL
         )
@@ -505,8 +536,9 @@ def sign_shortcut(
 
     except subprocess.CalledProcessError as e:
         print(f"Error: Unable to sign '{input_file.__str__()}'")
-        print(' '.join(e.args))
-        sys.exit(1)
+        print(f"Command '{' '.join(command)}' failed with error code {e.returncode}", file=sys.stderr)
+        print(e.stderr.decode('utf-8'), file=sys.stderr)
+        sys.exit(e.returncode)
 
 
 def run_shortcut(
@@ -786,9 +818,9 @@ def export_shortcut_logs(
             stderr=subprocess.DEVNULL
         )
     except subprocess.CalledProcessError as e:
-        print(f"Error while running command '{command}'")
-        print(e)
-        sys.exit(1)
+        print(f"Command '{' '.join(command)}' failed with error code {e.returncode}", file=sys.stderr)
+        print(e.stderr.decode('utf-8'), file=sys.stderr)
+        sys.exit(e.returncode)
 
 
 def stream_shortcut_logs(
