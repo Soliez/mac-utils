@@ -321,8 +321,8 @@ def sign_shortcut(
 
 def build_default_shortcut(
         color: Optional[Literal['red', 'orange', 'tangerine', 'yellow', 'lime', 'teal', 'cyan', 'blue', 'navy', 'grape', 'purple', 'pink', 'gray', 'sage', 'khaki']] = None,
-        workflow_types: Optional[list[Literal["quick-action", "share-sheet", "menu-bar", "watch", "screen", "all"]]] = None,
-        input_types: Optional[list[Literal["images", "media", "files", "folders", "pdfs", "text", "rich-text", "safari-web-pages", "urls", "articles", "maps-links", "locations", "contacts", "email-addresses", "phone-numbers", "dates", "app-store-apps", "itunes-products", "all"]]] = None
+        workflow_types: Optional[list[Literal["quick-action", "share-sheet", "menu-bar", "watch", "screen", "any"]]] = None,
+        input_types: Optional[list[Literal["images", "media", "files", "folders", "pdfs", "text", "rich-text", "safari-web-pages", "urls", "articles", "maps-links", "locations", "contacts", "email-addresses", "phone-numbers", "dates", "app-store-apps", "itunes-products", "any"]]] = None
     ) -> dict:
     '''
     Construct an empty shortcut with configured defaults
@@ -404,14 +404,14 @@ def build_default_shortcut(
 
 
     if workflow_types:
-        if 'all' in workflow_types:
+        if 'any' in workflow_types:
             selected_workflow_types = [workflow_types_map.get(item) for item in workflow_types_map.keys()]
         else:
             selected_workflow_types = [workflow_types_map.get(item) for item in workflow_types if item in workflow_types_map]
         base_shortcut['WFWorkflowTypes'] = selected_workflow_types
 
     if input_types:
-        if 'all' in input_types:
+        if 'any' in input_types:
             selected_input_types = [input_types_map.get(item) for item in input_types_map.keys()]
         else:
             selected_input_types = [input_types_map.get(item) for item in input_types if item in input_types_map]
@@ -1162,7 +1162,7 @@ def main():
             "  shortcut-util import <shortcut-share-url> --url\n"
             "  shortcut-util create\n"
             "  shortcut-util create -n 'New Shortcut Name' -i images media -t share-sheet -c red\n"
-            "  shortcut-util create --name 'New Shortcut Name' --input-types all --workflow-types all --color purple\n"
+            "  shortcut-util create --name 'New Shortcut Name' --input-types any --workflow-types any --color purple\n"
             "  shortcut-util icloud-url <shortcut-name>\n"
             "  shortcut-util export -n <shortcut-name> -s <save-destination>\n"
             "  shortcut-util export --names <shortcut1> <shortcut2> --save-dir <save-destination> --organize\n"
@@ -1222,7 +1222,7 @@ def main():
     create_parser = subparsers.add_parser('create', help='Create a new shortcut, optionally naming and configuring it')
     create_parser.add_argument('-n', '--name', type=str, help="Create a new shortcut with the given name")
     create_parser.add_argument('-i', '--input-types', type=str, nargs='+', help='The input item content types to accept in the new shortcut (e,g. "images", "media", "files", "folders", "pdfs", "text", "rich-text", "safari-web-pages", "urls", "articles", "maps-links", "locations", "contacts", "email-addresses", "phone-numbers", "dates", "app-store-apps", "itunes-products", "all")')
-    create_parser.add_argument('-t', '--workflow-types', type=str, nargs='+', help='The workflow types to allow in the new shortcut (e,g. "quick-action", "share-sheet", "menu-bar", "watch", "screen", "all")')
+    create_parser.add_argument('-t', '--workflow-types', type=str, nargs='+', help='The workflow types to allow in the new shortcut (e,g. "quick-action", "share-sheet", "menu-bar", "watch", "screen", "any")')
     create_parser.add_argument('-s', '--save-destination', type=str, help="The directory to save the new shortcut to. By default the newly created shortcut will delete the shortcut file after importing it unless specified not to")
     create_parser.add_argument('-c', '--color', type=str, help="Set the color of the new shortcut (e.g, 'red', 'orange', 'tangerine', 'yellow', 'lime', 'teal', 'cyan', 'blue', 'navy', 'grape', 'purple', 'pink', 'gray', 'sage', 'khaki')")
 
