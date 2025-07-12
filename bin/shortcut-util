@@ -10,6 +10,7 @@ import difflib
 import argparse
 import plistlib
 import subprocess
+from time import sleep
 from io import BytesIO
 from pathlib import Path
 from zipfile import ZipFile
@@ -268,25 +269,209 @@ def import_shortcut(path_or_url: str, isURL: bool = False) -> None:
             sys.exit(e.returncode)
             
 
+def sign_shortcut(
+        input_path: str,
+        output_path: str,
+        signing_mode: Literal['anyone', 'people-who-know-me'] = 'anyone',
+        add_to_library: bool = False
+    ) -> None:
+    '''
+    Sign a shortcut plist file (i.e, '.wflow', '.shortcut', '.plist') and output a signed shortcut ready for import
+    '''
+    
+    input_file = Path(input_path).expanduser().resolve()
+    output_file = Path(output_path).expanduser().resolve()
 
-def create_shortcut() -> None:
+    if not input_file.exists():
+        print(f"Error: Invalid path '{input_file}'")
+        sys.exit(1)
+
+    old_suffix: Optional[str] = None
+    
+    # Temporarily rename .plist files to .wflow to satisfy /usr/bin/shortcuts
+    if input_file.suffix == '.plist':
+        old_suffix = input_file.suffix
+        input_file = input_file.rename(input_file.with_suffix('.wflow'))
+
+    try:
+        command = ['shortcuts', 'sign', '-i', str(input_file), '-m', signing_mode, '-o', str(output_file)]
+        subprocess.run(
+            command,
+            check=True,
+            stderr=subprocess.DEVNULL
+        )
+
+        if not output_file.exists():
+            print(f"Error: Unable to sign '{input_file}'")
+            sys.exit(1)
+
+        if add_to_library:
+            import_shortcut(str(output_file))
+
+    except subprocess.CalledProcessError as e:
+        print(f"Error: Unable to sign '{input_file}'")
+        print(f"Command '{' '.join(command)}' failed with error code {e.returncode}", file=sys.stderr)
+        sys.exit(e.returncode)
+
+    finally:
+        # Rename the input file back to its original suffix if it was changed
+        if old_suffix is not None:
+            input_file.rename(input_file.with_suffix(old_suffix))
+
+
+def build_default_shortcut(
+        color: Optional[Literal['red', 'orange', 'tangerine', 'yellow', 'lime', 'teal', 'cyan', 'blue', 'navy', 'grape', 'purple', 'pink', 'gray', 'sage', 'khaki']],
+        workflow_types: Optional[list[Literal["quick-action", "share-sheet", "menu-bar", "watch", "screen", "all"]]] = None,
+        input_types: Optional[list[Literal["images", "media", "files", "folders", "pdfs", "text", "rich-text", "safari-web-pages", "urls", "articles", "maps-links", "locations", "contacts", "email-addresses", "phone-numbers", "dates", "app-store-apps", "itunes-products", "all"]]] = None
+    ) -> dict:
+    '''
+    Construct an empty shortcut with configured defaults
+
+    Used to create a new named shortcut with configured defaults for use in the 'create' subcommand
+    '''
+
+    base_shortcut = { 
+        "WFQuickActionSurfaces": [], 
+        "WFWorkflowActions": [], 
+        "WFWorkflowClientVersion": "3607.0.2", 
+        "WFWorkflowHasOutputFallback": False, 
+        "WFWorkflowHasShortcutInputVariables": False, 
+        "WFWorkflowIcon": { 
+            "WFWorkflowIconGlyphNumber": 61440, # Default shortcut glyph
+            "WFWorkflowIconStartColor": 3679049983 # Purple (hex #a062c9)
+        }, 
+        "WFWorkflowImportQuestions": [], 
+        "WFWorkflowInputContentItemClasses": [], 
+        "WFWorkflowMinimumClientVersion": 900, 
+        "WFWorkflowMinimumClientVersionString": "900", 
+        "WFWorkflowOutputContentItemClasses": [], 
+        "WFWorkflowTypes": [] 
+    }
+
+    workflow_types_map = {
+        'quick-action': 'QuickActions',
+        'share-sheet': 'ActionExtension',
+        'menu-bar': 'MenuBar',
+        'watch': 'Watch',
+        'screen': 'RecievesOnScreenContent'
+    }
+
+    input_types_map = {
+        "images": "WFImageContentItem",
+        "media": "WFAVAssetContentItem",
+        "files": "WFGenericFileContentItem",
+        "folders": "WFFolderContentItem",
+        "pdfs": "WFPDFContentItem",
+        "text": "WFStringContentItem",
+        "rich-text":"WFRichTextContentItem",
+        "safari-web-pages": "WFSafariWebPageContentItem",
+        "urls": "WFURLContentItem",
+        "articles": "WFArticleContentItem",
+        "maps-links": "WFDCMapsLinkContentItem",
+        "locations": "WFLocationContentItem",
+        "contacts": "WFContactContentItem",
+        "email-addresses": "WFEmailAddressContentItem",
+        "phone-numbers": "WFPhoneNumberContentItem",
+        "dates": "WFDateContentItem",
+        "app-store-apps": "WFAppStoreAppContentItem",
+        "itunes-products": "WFiTunesProductContentItem"
+    }
+
+    color_map = {
+        'red': 4282601983,
+        'orange': 4251333119,
+        'tangerine': 4271458815,
+        'yellow': 4274264319,
+        'lime': 4292093695,
+        'teal': 431817727,
+        'cyan': 1440408063,
+        'blue': 463140863,
+        'navy': 946986751,
+        'grape': 2071128575,
+        'purple': 3679049983,
+        'pink': 3980825855,
+        'gray': 255,
+        'sage': 3031607807,
+        'khaki': 3031607807
+    }
+
+    if color:
+        if color in color_map:
+            base_shortcut['WFWorkflowIcon']['WFWorkflowIconStartColor'] = color_map[color]
+        else:
+            print(f"Warning: '{color}' is not a valid shortcut color. Using default color (purple)")
+            base_shortcut['WFWorkflowIcon']['WFWorkflowIconStartColor'] = color_map['purple']
+
+
+    if workflow_types:
+        if 'all' in workflow_types:
+            selected_workflow_types = [workflow_types_map.get(item) for item in workflow_types_map.keys()]
+        else:
+            selected_workflow_types = [workflow_types_map.get(item) for item in workflow_types if item in workflow_types_map]
+        base_shortcut['WFWorkflowTypes'] = selected_workflow_types
+
+    if input_types:
+        if 'all' in input_types:
+            selected_input_types = [input_types_map.get(item) for item in input_types_map.keys()]
+        else:
+            selected_input_types = [input_types_map.get(item) for item in input_types if item in input_types_map]
+        base_shortcut['WFWorkflowInputContentItemClasses'] = selected_input_types
+
+    return base_shortcut
+
+
+def create_shortcut(
+        name: Optional[str] = None,
+        default_shortcut: Optional[dict] = None,
+        save_destination: Optional[str] = None,
+    ) -> None:
     '''
     Create a new shortcut in the Shortcuts Editor
     '''
 
-    try:
-        url = 'shortcuts://create-shortcut'
-        command = ['open', url]
-        subprocess.run(
-            command,
-            check=True
-        )
-    except subprocess.CalledProcessError as e:
-        print(f'Error: Unable to create new shortcut\n')
-        print(f"Command '{' '.join(command)}' failed with error code {e.returncode}", file=sys.stderr)
-        print(e.stderr.decode('utf-8'), file=sys.stderr)
-        sys.exit(e.returncode)
+    # Default behaviour when 'shortcut-util create' with no additional arguments
+    if not name and not default_shortcut:
+        try:
+            url = 'shortcuts://create-shortcut'
+            command = ['open', url]
+            subprocess.run(
+                command,
+                check=True
+            )
+        except subprocess.CalledProcessError as e:
+            print(f'Error: Unable to create new shortcut\n')
+            print(f"Command '{' '.join(command)}' failed with error code {e.returncode}", file=sys.stderr)
+            print(e.stderr.decode('utf-8'), file=sys.stderr)
+            sys.exit(e.returncode)
 
+    # Behaviour for creating a named and configured shortcut
+    if name:
+        if save_destination:
+            path = Path(save_destination).expanduser().resolve() / name
+        else:
+            path = Path('.').resolve() / name
+        
+        path = path.with_suffix('.wflow')
+
+        with open(str(path), 'wb') as f:
+            plistlib.dump(default_shortcut, f)
+
+        sign_shortcut(
+            input_path=str(path),
+            output_path=str(path),
+            signing_mode='anyone',
+            add_to_library=False
+        )
+
+        try:
+            import_shortcut(str(path))
+            # This is to prevent a race condition where the file is deleted before it can be loaded by Shortcuts
+            sleep(3)
+        finally:
+            # Delete the new shortcut after importing it into the Shortcuts library unless explicitly instructed to save it
+            if not save_destination:
+                path.unlink()
+            
 
 def export_shortcuts(
         save_dir: str,
@@ -508,55 +693,6 @@ def build_shortcuts_url(
             else:
                 print(f"Error: Invalid input type '{input_type}'\nAccepted input types: 'text', 'clipboard'")
                 sys.exit(1)
-
-
-def sign_shortcut(
-        input_path: str,
-        output_path: str,
-        signing_mode: Literal['anyone', 'people-who-know-me'] = 'anyone',
-        add_to_library: bool = False
-        ) -> None:
-    '''
-    Sign a shortcut plist file (i.e, '.wflow', '.shortcut', '.plist') and output a signed shortcut ready for import
-    '''
-    
-    # expanduser is called just in case either path contains an unexpanded tilde
-    input_file = Path(input_path).expanduser().resolve()
-    output_file = Path(output_path).expanduser().resolve()
-    
-
-    if not input_file.exists():
-        print(f"Error: Invalid path '{input_file.__str__()}'")
-        sys.exit(1)
-
-    # If the input file has the .plist extension, rename it with the .wflow extension so /usr/bin/shortcuts cooperates
-    if input_file.suffix == '.plist':
-        old_suffix = input_file.suffix
-        input_file = input_file.rename(input_file.with_suffix('.wflow'))
-
-    try:
-        command = ['shortcuts', 'sign', '-i', str(input_file), '-m', signing_mode, '-o', str(output_file)]
-        process = subprocess.run(
-            command,
-            check=True,
-            stderr=subprocess.DEVNULL
-        )
-        if not output_file.exists():
-            print(f"Error: Unable to sign '{input_file.__str__()}'")
-            sys.exit(1)
-
-        if add_to_library:
-            import_shortcut(str(output_file))
-
-        # Rename the input file back to it's original suffix
-        if old_suffix:
-            input_file.rename(input_file.with_suffix(old_suffix))
-
-    except subprocess.CalledProcessError as e:
-        print(f"Error: Unable to sign '{input_file.__str__()}'")
-        print(f"Command '{' '.join(command)}' failed with error code {e.returncode}", file=sys.stderr)
-        print(e.stderr.decode('utf-8'), file=sys.stderr)
-        sys.exit(e.returncode)
 
 
 def run_shortcut(
@@ -1025,6 +1161,8 @@ def main():
             "  shortcut-util import <path-to-shortcut-file>\n"
             "  shortcut-util import <shortcut-share-url> --url\n"
             "  shortcut-util create\n"
+            "  shortcut-util create -n 'New Shortcut Name' -i images media -t share-sheet -c red\n"
+            "  shortcut-util create --name 'New Shortcut Name' --input-types all --workflow-types all --color purple\n"
             "  shortcut-util icloud-url <shortcut-name>\n"
             "  shortcut-util export -n <shortcut-name> -s <save-destination>\n"
             "  shortcut-util export --names <shortcut1> <shortcut2> --save-dir <save-destination> --organize\n"
@@ -1076,12 +1214,17 @@ def main():
     open_parser.add_argument('name', help='The name of the Shortcut to open')
 
     # import parser
-    import_parser = subparsers.add_parser('import', help="Import a shortcut file into your Shortcuts Library")
+    import_parser = subparsers.add_parser('import', help="Import a shortcut from a file or icloud share url into your Shortcuts Library")
     import_parser.add_argument('path_or_url', help='The path to the shortcut file or the iCloud Share URL of the shortcut to import')
     import_parser.add_argument('--url', action='store_true', help='Import the shortcut from an iCloud Share URL')
 
     # create parser
-    create_parser = subparsers.add_parser('create', help='Create a new shortcut in the Shortcuts Editor')
+    create_parser = subparsers.add_parser('create', help='Create a new shortcut, optionally naming and configuring it')
+    create_parser.add_argument('-n', '--name', type=str, help="Create a new shortcut with the given name")
+    create_parser.add_argument('-i', '--input-types', type=str, nargs='+', help='The input item content types to accept in the new shortcut (e,g. "images", "media", "files", "folders", "pdfs", "text", "rich-text", "safari-web-pages", "urls", "articles", "maps-links", "locations", "contacts", "email-addresses", "phone-numbers", "dates", "app-store-apps", "itunes-products", "all")')
+    create_parser.add_argument('-t', '--workflow-types', type=str, nargs='+', help='The workflow types to allow in the new shortcut (e,g. "quick-action", "share-sheet", "menu-bar", "watch", "screen", "all")')
+    create_parser.add_argument('-s', '--save-destination', type=str, help="The directory to save the new shortcut to. By default the newly created shortcut will delete the shortcut file after importing it unless specified not to")
+    create_parser.add_argument('-c', '--color', type=str, help="Set the color of the new shortcut (e.g, 'red', 'orange', 'tangerine', 'yellow', 'lime', 'teal', 'cyan', 'blue', 'navy', 'grape', 'purple', 'pink', 'gray', 'sage', 'khaki')")
 
     # icloud-url parser
     icloud_url_parser = subparsers.add_parser('icloud-url', help='Create an iCloud Share URL for a shortcut in your library')
@@ -1267,7 +1410,20 @@ def main():
     
     # create main
     elif args.command == 'create':
-        create_shortcut()
+        # Default when creating a new shortcut unconfigured and with no name
+        if not args.name:
+            create_shortcut()
+        else:
+            shortcut = build_default_shortcut(
+                color=args.color,
+                input_types=args.input_types,
+                workflow_types=args.workflow_types
+            )    
+            create_shortcut(
+                name=args.name,
+                default_shortcut=shortcut,
+                save_destination=args.save_destination
+            )
 
     # icloud-url main
     elif args.command == 'icloud-url':
