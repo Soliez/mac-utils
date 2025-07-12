@@ -320,7 +320,7 @@ def sign_shortcut(
 
 
 def build_default_shortcut(
-        color: Optional[Literal['red', 'orange', 'tangerine', 'yellow', 'lime', 'teal', 'cyan', 'blue', 'navy', 'grape', 'purple', 'pink', 'gray', 'sage', 'khaki']],
+        color: Optional[Literal['red', 'orange', 'tangerine', 'yellow', 'lime', 'teal', 'cyan', 'blue', 'navy', 'grape', 'purple', 'pink', 'gray', 'sage', 'khaki']] = None,
         workflow_types: Optional[list[Literal["quick-action", "share-sheet", "menu-bar", "watch", "screen", "all"]]] = None,
         input_types: Optional[list[Literal["images", "media", "files", "folders", "pdfs", "text", "rich-text", "safari-web-pages", "urls", "articles", "maps-links", "locations", "contacts", "email-addresses", "phone-numbers", "dates", "app-store-apps", "itunes-products", "all"]]] = None
     ) -> dict:
