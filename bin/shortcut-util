@@ -5,6 +5,7 @@ import re
 import sys
 import pty
 import json
+import errno
 import base64
 import difflib
 import argparse
@@ -16,9 +17,75 @@ from pathlib import Path
 from zipfile import ZipFile
 from datetime import datetime
 from urllib.parse import urlparse, quote
-from typing import Literal, Optional, Union
+from typing import Literal, Optional, Any
 
 
+
+SCRIPT_PATH = Path(__file__).resolve()
+PROJECT_ROOT = SCRIPT_PATH.parent.parent
+
+
+def get_missing_resource_message(path: str) -> str:
+    '''
+    Build a message informing the user that there are missing resources files and instruct them on how to fix the issue
+    '''
+    file = Path(path).resolve()
+    lines = [
+        f"\033[31mError\033[0m: Missing necessary resource file '{file.name}' from '{str(file.parent)}'",
+        "\nTo fix this, try one of the following methods:\n",
+        "1. If you downloaded the script manually, clone the full repository instead and install via Make:",
+        "\tgit clone https://github.com/Soliez/mac-utils.git && cd mac-utils && make install",
+        "\n2. If you already cloned the repo but are missing files, move into the project directory and reset it to the latest version:",
+        "\tgit fetch origin && git reset --hard origin/main"
+    ]
+    message = ''.join(lines)
+    return message
+
+
+def load_resource(filename: str, data_type: Literal['text', 'binary', 'json', 'plist']) -> Any:
+    '''
+    Project resource file loader
+    '''
+    valid_data_types = ['text', 'binary', 'json', 'plist']
+    
+    if data_type not in valid_data_types:
+        print(f"\033[31mError\033[0m: Invalid data type '{data_type}'\nValid types: ({', '.join(valid_data_types)})", file=sys.stderr)
+        sys.exit(1)
+
+    resource_file = PROJECT_ROOT / 'resources' / 'shortcut_util' / filename
+
+    if not resource_file.exists():
+        error_message = get_missing_resource_message(str(resource_file))
+        raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), str(resource_file)).add_note(error_message)
+    
+    try:
+        if data_type == 'text':
+            data = resource_file.read_text()
+        elif data_type == 'binary':
+            data = resource_file.read_bytes()
+        elif data_type == 'json':
+            with resource_file.open(mode='rb') as f:
+                data = json.load(fp=f)
+        elif data_type == 'plist':
+            with resource_file.open(mode='rb') as f:
+                data = plistlib.load(fp=f)
+        return data
+    except (PermissionError, IsADirectoryError) as e:
+        print(f"\033[31m{type(e).__name__}\033[0m: {os.strerror(e.errno)}", file=sys.stderr)
+        sys.exit(1)
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        if isinstance(e, json.JSONDecodeError):
+            print(f"\033[31m{type(e).__name__}\033[0m: Unable to load JSON document '{e.doc}'\nParsing failed on line \033[35m{e.lineno}\033[0m at position \033[35m{e.colno}\033[0m (index \033[35m{e.pos}\033[0m)", file=sys.stderr)
+        else:
+            print(f"\033[31m{type(e).__name__}\033[0m: Invalid JSON data - {e.reason}", file=sys.stderr)
+        sys.exit(1)
+    except plistlib.InvalidFileException as e:
+        print(f"\033[31m{type(e).__name__}\033[0m: Invalid PLIST data", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"\033[31m{type(e).__name__}\033[0m: An unexpected error occured\n{e}", file=sys.stderr)
+        sys.exit(1)
+    
 
 def get_shortcut_names() -> list:
     '''
@@ -87,7 +154,7 @@ def save_shortcut(
     valid_extensions = ['shortcut', 'wflow', 'plist', 'json']
 
     if not extension in valid_extensions:
-        print(f"Error: Invalid extension '{extension}'.\nAcceptable extensions: {valid_extensions}")
+        print(f"\033[31mError\033[0m: Invalid extension '{extension}'.\nAcceptable extensions: {valid_extensions}")
         sys.exit(1)
 
     # expanduser is called just in case 'save_destination' contains an unexpanded tilde
@@ -161,7 +228,7 @@ def open_shortcut(shortcut_name: str) -> None:
     '''
 
     if not shortcut_exists(shortcut_name):
-        print(f"Error: '{shortcut_name}' does not appear to match the name of a shortcut in your library")
+        print(f"\033[31mError\033[0m: '{shortcut_name}' does not appear to match the name of a shortcut in your library")
         sys.exit(1)
 
     command = ['shortcuts', 'view', shortcut_name]
@@ -172,7 +239,7 @@ def open_shortcut(shortcut_name: str) -> None:
             check=True
         )
     except subprocess.CalledProcessError as e:
-        print(f"Error: Unable to open shortcut '{shortcut_name}'\n")
+        print(f"\033[31mError\033[0m: Unable to open shortcut '{shortcut_name}'\n")
         print(f"Command '{' '.join(command)}' failed with error code {e.returncode}", file=sys.stderr)
         print(e.stderr.decode('utf-8'), file=sys.stderr)
         sys.exit(e.returncode)
@@ -190,7 +257,7 @@ def get_icloud_url(shortcut_name: str) -> str:
     '''
     
     if not shortcut_exists(shortcut_name):
-        print(f"Error: No shortcut named '{shortcut_name}' was found in your Shortcuts Library")
+        print(f"\033[31mError\033[0m: No shortcut named '{shortcut_name}' was found in your Shortcuts Library")
         sys.exit(1)
 
     utility_shortcut = "Get iCloud URL Non-Interactive"
@@ -205,7 +272,7 @@ def get_icloud_url(shortcut_name: str) -> str:
         url = base64.b64decode(process.stdout)
         return url.decode('utf-8').removesuffix('\n')
     except subprocess.CalledProcessError as e:
-        print(f"Error: Unable to get iCloud Share URL for shortcut '{shortcut_name}'\n")
+        print(f"\033[31mError\033[0m: Unable to get iCloud Share URL for shortcut '{shortcut_name}'\n")
         print(f"Command '{' '.join(command)}' failed with error code {e.returncode}", file=sys.stderr)
         print(e.stderr.decode('utf-8'), file=sys.stderr)
         sys.exit(e.returncode)
@@ -220,7 +287,7 @@ def get_icloud_url_identifier(icloud_url: str) -> str:
         identifier = components.path.removeprefix('/shortcuts/')
         return identifier
     else:
-        print(f"Error: Invalid iCloud URL '{icloud_url}'")
+        print(f"\033[31mError\033[0m: Invalid iCloud URL '{icloud_url}'")
         print('\tThe URL should conform to the following structure: https://www.icloud.com/shortcuts/<SHORTCUT_ID>')
         sys.exit(1)
 
@@ -241,7 +308,7 @@ def import_shortcut(path_or_url: str, isURL: bool = False) -> None:
                 check=True
             )
         except subprocess.CalledProcessError as e:
-            print(f"Error: Unable to import shortcut from URL '{path_or_url}'\n")
+            print(f"\033[31mError\033[0m: Unable to import shortcut from URL '{path_or_url}'\n")
             print(f"Command '{' '.join(command)}' failed with error code {e.returncode}", file=sys.stderr)
             print(e.stderr.decode('utf-8'), file=sys.stderr)
             sys.exit(e.returncode)
@@ -249,11 +316,11 @@ def import_shortcut(path_or_url: str, isURL: bool = False) -> None:
     else:
         file = Path(path_or_url).resolve()
         if not file.exists():
-            print(f"Error: '{str(file)}' does not appear to exist")
+            print(f"\033[31mError\033[0m: '{str(file)}' does not appear to exist")
             sys.exit(1)
 
         if not file.is_file():
-            print(f"Error: path '{str(file)}' exists but does not appear to be a file")
+            print(f"\033[31mError\033[0m: path '{str(file)}' exists but does not appear to be a file")
             sys.exit(1)
         
         command = ['open', '-a', 'Shortcuts', str(file)]
@@ -263,7 +330,7 @@ def import_shortcut(path_or_url: str, isURL: bool = False) -> None:
                 check=True
             )
         except subprocess.CalledProcessError as e:
-            print(f"Error: Unable to import shortcut file '{file.name}'\n")
+            print(f"\033[31mError\033[0m: Unable to import shortcut file '{file.name}'\n")
             print(f"Command '{' '.join(command)}' failed with error code {e.returncode}", file=sys.stderr)
             print(e.stderr.decode('utf-8'), file=sys.stderr)
             sys.exit(e.returncode)
@@ -283,7 +350,7 @@ def sign_shortcut(
     output_file = Path(output_path).expanduser().resolve()
 
     if not input_file.exists():
-        print(f"Error: Invalid path '{input_file}'")
+        print(f"\033[31mError\033[0m: Invalid path '{input_file}'")
         sys.exit(1)
 
     old_suffix: Optional[str] = None
@@ -302,14 +369,14 @@ def sign_shortcut(
         )
 
         if not output_file.exists():
-            print(f"Error: Unable to sign '{input_file}'")
+            print(f"\033[31mError\033[0m: Unable to sign '{input_file}'")
             sys.exit(1)
 
         if add_to_library:
             import_shortcut(str(output_file))
 
     except subprocess.CalledProcessError as e:
-        print(f"Error: Unable to sign '{input_file}'")
+        print(f"\033[31mError\033[0m: Unable to sign '{input_file}'")
         print(f"Command '{' '.join(command)}' failed with error code {e.returncode}", file=sys.stderr)
         sys.exit(e.returncode)
 
@@ -321,6 +388,7 @@ def sign_shortcut(
 
 def build_default_shortcut(
         color: Optional[Literal['red', 'orange', 'tangerine', 'yellow', 'lime', 'teal', 'cyan', 'blue', 'navy', 'grape', 'purple', 'pink', 'gray', 'sage', 'khaki']] = None,
+        glyph: Optional[str] = None,
         workflow_types: Optional[list[Literal["quick-action", "share-sheet", "menu-bar", "watch", "screen", "any"]]] = None,
         input_types: Optional[list[Literal["images", "media", "files", "folders", "pdfs", "text", "rich-text", "safari-web-pages", "urls", "articles", "maps-links", "locations", "contacts", "email-addresses", "phone-numbers", "dates", "app-store-apps", "itunes-products", "any"]]] = None
     ) -> dict:
@@ -395,13 +463,25 @@ def build_default_shortcut(
         'khaki': 3031607807
     }
 
+    try:
+        glyph_map = load_resource(filename='glyphs.json', data_type='json')
+    except FileNotFoundError as e:
+        print(e.__notes__[0], file=sys.stderr)
+        sys.exit(1)
+
     if color:
         if color in color_map:
             base_shortcut['WFWorkflowIcon']['WFWorkflowIconStartColor'] = color_map[color]
         else:
-            print(f"Warning: '{color}' is not a valid shortcut color. Using default color (purple)")
+            print(f"\033[33mWarning\033[0m: '{color}' is not a valid shortcut color. Using default color (purple)")
             base_shortcut['WFWorkflowIcon']['WFWorkflowIconStartColor'] = color_map['purple']
 
+    if glyph:
+        if glyph in glyph_map:
+            base_shortcut['WFWorkflowIcon']['WFWorkflowIconGlyphNumber'] = glyph_map[glyph]
+        else:
+            print(f"\033[33mWarning\033[0m: '{glyph}' is not a valid glyph used by Shortcuts. Using default shortcut glyph")
+            base_shortcut['WFWorkflowIcon']['WFWorkflowIconGlyphNumber'] = glyph_map['shortcuts']
 
     if workflow_types:
         if 'any' in workflow_types:
@@ -512,7 +592,7 @@ def export_shortcuts(
         sys.exit(1)
 
     if compressed and compression_algo not in supported_algos:
-        print(f"Error: '{compression_algo}' is not a supported compression algorithm")
+        print(f"\033[31mError\033[0m: '{compression_algo}' is not a supported compression algorithm")
         print(f"Supported Algorithms: {supported_algos}")
         sys.exit(1)
 
@@ -593,7 +673,7 @@ def compare_shortcuts(name1: str, name2: str) -> None:
 
     for name in [name1, name2]:
         if not shortcut_exists(name):
-            print(f"Error: '{name}' does not appear to match the name of a shortcut in your library")
+            print(f"\033[31mError\033[0m: '{name}' does not appear to match the name of a shortcut in your library")
             sys.exit(1)
     
     shortcut1 = get_shortcut_plist(name1, output_dict=False).splitlines(keepends=False)
@@ -656,7 +736,7 @@ def build_shortcuts_url(
     
     if import_link:
         if not shortcut_exists(shortcut_name):
-            print(f"Error: Unable to build an import URL for a non-existent shortcut")
+            print(f"\033[31mError\033[0m: Unable to build an import URL for a non-existent shortcut")
             sys.exit(1)
         else:
             icloud_url = get_icloud_url(shortcut_name)
@@ -675,7 +755,7 @@ def build_shortcuts_url(
                 return f"shortcuts://run-shortcut?name={name}&input={input_type}"
             # invalid input type
             else:
-                print(f"Error: Invalid input type '{input_type}'\nAccepted input types: 'text', 'clipboard'")
+                print(f"\033[31mError\033[0m: Invalid input type '{input_type}'\nAccepted input types: 'text', 'clipboard'")
                 sys.exit(1)
         else:
             x_success = quote(x_success_url, safe='')
@@ -691,7 +771,7 @@ def build_shortcuts_url(
                 return f"shortcuts://x-callback-url/run-shortcut?name={name}&input={input_type}&x-success={x_success}&x-cancel={x_cancel}&x-error={x_error}"
             # invalid input type
             else:
-                print(f"Error: Invalid input type '{input_type}'\nAccepted input types: 'text', 'clipboard'")
+                print(f"\033[31mError\033[0m: Invalid input type '{input_type}'\nAccepted input types: 'text', 'clipboard'")
                 sys.exit(1)
 
 
@@ -722,7 +802,7 @@ def run_shortcut(
         if input_is_file:
             input_path = Path(shortcut_input).expanduser().resolve()
             if not input_path.exists():
-                print(f"Error: Input file '{input_path}' not found.", file=sys.stderr)
+                print(f"\033[31mError\033[0m: Input file '{input_path}' not found.", file=sys.stderr)
                 sys.exit(1)
             process_input = input_path.read_bytes()
         elif shortcut_input == '-':
@@ -913,7 +993,7 @@ def export_shortcut_logs(
 
     if save_path.suffix:
         if save_path.suffix != '.logarchive':
-            print(f"Error: Invalid export path '{str(output_path)}'")
+            print(f"\033[31mError\033[0m: Invalid export path '{str(output_path)}'")
             print("Output path must either be a directory or have the suffix .logarchive")
             sys.exit(1)
         else:
@@ -926,26 +1006,26 @@ def export_shortcut_logs(
 
     if time_interval:
         if not is_valid_time_interval(time_interval):
-            print(f"Warning: Invalid time interval '{time_interval}'. Ignoring ...")
+            print(f"\033[33mWarning\033[0m: Invalid time interval '{time_interval}'. Ignoring ...")
         else:
             command.extend(['--last', time_interval])
 
     if start:
         if not is_valid_timestamp(start):
-            print(f"Warning: Invalid timestamp '{start}'. Ignoring ...")
+            print(f"\033[33mWarning\033[0m: Invalid timestamp '{start}'. Ignoring ...")
         else:
             command.extend(['--start', start])
 
         if end:
             if not is_valid_timestamp(end):
-                print(f"Warning: Invalid timestamp '{end}'. Ignoring ...")
+                print(f"\033[33mWarning\033[0m: Invalid timestamp '{end}'. Ignoring ...")
             else:
                 command.extend(['--end', end])
 
     if log_size:
         if not is_valid_export_size(log_size):
             # Exit if a log size is provided but is invalid
-            print(f"Error: Invalid export size '{log_size}'")
+            print(f"\033[31mError\033[0m: Invalid export size '{log_size}'")
             sys.exit(1)
         else:
             command.extend(['--size', log_size])
@@ -961,7 +1041,7 @@ def export_shortcut_logs(
             command.extend(['--device-udid', device_udid])
         else:
             # Exit if a UDID is provided but is invalid
-            print(f"Error: Invalid UDID '{device_udid}'")
+            print(f"\033[31mError\033[0m: Invalid UDID '{device_udid}'")
             sys.exit(1)
     
     try:
@@ -980,7 +1060,7 @@ def export_shortcut_logs(
 def stream_shortcut_logs(
     predicate: str,
     show_color: bool = True,
-    process: Optional[Union[str, int]] = None,
+    process: Optional[str] = None,
     log_format: Literal['default', 'compact', 'json', 'syslog'] = 'default',
     timeout: Optional[str] = None,
     include_source: bool = False,
@@ -1025,7 +1105,7 @@ def stream_shortcut_logs(
     if timeout:
         if not is_valid_time_interval(timeout):
             # Exit if a timeout was provided but was invalid so the process dosen't run in the background forever
-            print(f"Error: Invalid timeout interval '{timeout}'.")
+            print(f"\033[31mError\033[0m: Invalid timeout interval '{timeout}'.")
             sys.exit(1)
         else:
             command.extend(['--timeout', timeout])
@@ -1056,7 +1136,7 @@ def view_shortcuts_logs(
     time_interval: Optional[str] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
-    process: Optional[Union[str, int]] = None,
+    process: Optional[str] = None,
     include_source: bool = False,
     log_format: Literal['default', 'compact', 'json', 'ndjson', 'syslog'] = 'default',
 ) -> None:
@@ -1102,19 +1182,19 @@ def view_shortcuts_logs(
     
     if time_interval:
         if not is_valid_time_interval(time_interval) and not time_interval == 'boot':
-            print(f"Warning: Invalid time interval '{time_interval}'. Ignoring ...")
+            print(f"\033[33mWarning\033[0m: Invalid time interval '{time_interval}'. Ignoring ...")
         else:
             command.extend(['--last', time_interval])
     
     if start:
         if not is_valid_timestamp(start):
-            print(f"Warning: Invalid timestamp '{start}'. Ignoring ...")
+            print(f"\033[33mWarning\033[0m: Invalid timestamp '{start}'. Ignoring ...")
         else:
             command.extend(['--start', start])
 
         if end:
             if not is_valid_timestamp(end):
-                print(f"Warning: Invalid timestamp '{end}'. Ignoring ...")
+                print(f"\033[33mWarning\033[0m: Invalid timestamp '{end}'. Ignoring ...")
             else:
                 command.extend(['--end', end])
 
@@ -1122,7 +1202,7 @@ def view_shortcuts_logs(
         archive_path = Path(from_archive).resolve()
         if not archive_path.exists() or not archive_path.suffix == '.logarchive':
             # Exit here since the user explicitly wants to view logs from a logarchive and the path is invalid
-            print(f"Error: Invalid logarchive path '{str(archive_path)}'")
+            print(f"\033[31mError\033[0m: Invalid logarchive path '{str(archive_path)}'")
             sys.exit(1)
         command.extend(['--archive', str(archive_path)])
     
@@ -1161,8 +1241,8 @@ def main():
             "  shortcut-util import <path-to-shortcut-file>\n"
             "  shortcut-util import <shortcut-share-url> --url\n"
             "  shortcut-util create\n"
-            "  shortcut-util create -n 'New Shortcut Name' -i images media -t share-sheet -c red\n"
-            "  shortcut-util create --name 'New Shortcut Name' --input-types any --workflow-types any --color purple\n"
+            "  shortcut-util create -n <new-shortcut-name> -i images media -t share-sheet -c red -g photoStack\n"
+            "  shortcut-util create --name <new-shortcut-name> --input-types locations --workflow-types share-sheet --color lime --glyph locationArrow\n"
             "  shortcut-util icloud-url <shortcut-name>\n"
             "  shortcut-util export -n <shortcut-name> -s <save-destination>\n"
             "  shortcut-util export --names <shortcut1> <shortcut2> --save-dir <save-destination> --organize\n"
@@ -1225,6 +1305,7 @@ def main():
     create_parser.add_argument('-t', '--workflow-types', type=str, nargs='+', help='The workflow types to allow in the new shortcut (e,g. "quick-action", "share-sheet", "menu-bar", "watch", "screen", "any")')
     create_parser.add_argument('-s', '--save-destination', type=str, help="The directory to save the new shortcut to. By default the newly created shortcut will delete the shortcut file after importing it unless specified not to")
     create_parser.add_argument('-c', '--color', type=str, help="Set the color of the new shortcut (e.g, 'red', 'orange', 'tangerine', 'yellow', 'lime', 'teal', 'cyan', 'blue', 'navy', 'grape', 'purple', 'pink', 'gray', 'sage', 'khaki')")
+    create_parser.add_argument('-g', '--glyph', type=str, help="The name of the glyph to use in the new shortcut's icon")
 
     # icloud-url parser
     icloud_url_parser = subparsers.add_parser('icloud-url', help='Create an iCloud Share URL for a shortcut in your library')
@@ -1324,7 +1405,7 @@ def main():
     # get-actions main
     if args.command == 'get-actions':
         if not shortcut_exists(args.name):
-            print(f"Error: '{args.name}' does not exist in your Shortcuts library")
+            print(f"\033[31mError\033[0m: '{args.name}' does not exist in your Shortcuts library")
             sys.exit(1)
 
         plist = get_shortcut_plist(args.name)
@@ -1342,7 +1423,7 @@ def main():
     # count-actions main
     elif args.command == 'count-actions':
         if not shortcut_exists(args.name):
-            print(f"Error: '{args.name}' does not exist in your Shortcuts library")
+            print(f"\033[31mError\033[0m: '{args.name}' does not exist in your Shortcuts library")
             sys.exit(1)
 
         plist = get_shortcut_plist(args.name)
@@ -1352,7 +1433,7 @@ def main():
     # convert main
     elif args.command == 'convert':
         if not shortcut_exists(args.name):
-            print(f"Error: '{args.name}' does not exist in your Shortcuts library")
+            print(f"\033[31mError\033[0m: '{args.name}' does not exist in your Shortcuts library")
             sys.exit(1)
 
         plist = get_shortcut_plist(args.name)
@@ -1388,12 +1469,12 @@ def main():
     # get-uuid main
     elif args.command == 'get-uuid':
         if not shortcut_exists(args.name):
-            print(f"Error: '{args.name}' does not exist in your Shortcuts library")
+            print(f"\033[31mError\033[0m: '{args.name}' does not exist in your Shortcuts library")
             sys.exit(1)
 
         uuid = get_shortcut_uuid(args.name)
         if not uuid:
-            print(f"Error: UUID for '{args.name}' not found")
+            print(f"\033[31mError\033[0m: UUID for '{args.name}' not found")
             sys.exit(1)
         print(uuid)
     
@@ -1416,6 +1497,7 @@ def main():
         else:
             shortcut = build_default_shortcut(
                 color=args.color,
+                glyph=args.glyph,
                 input_types=args.input_types,
                 workflow_types=args.workflow_types
             )    
@@ -1468,7 +1550,7 @@ def main():
     elif args.command == 'sign':
         valid_modes = ['anyone','people-who-know-me']
         if args.signing_mode not in valid_modes:
-            print(f"Error: Invalid signing mode '{args.signing_mode}'.\nAcceptable signing modes: {valid_modes}")
+            print(f"\033[31mError\033[0m: Invalid signing mode '{args.signing_mode}'.\nAcceptable signing modes: {valid_modes}")
             sys.exit(1)
 
         if args.add_to_library:
