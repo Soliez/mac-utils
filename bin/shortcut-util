@@ -389,6 +389,13 @@ def sign_shortcut(
 def build_default_shortcut(
         color: Optional[Literal['red', 'orange', 'tangerine', 'yellow', 'lime', 'teal', 'cyan', 'blue', 'navy', 'grape', 'purple', 'pink', 'gray', 'sage', 'khaki']] = None,
         glyph: Optional[str] = None,
+        no_input_action: Optional[Literal['stopandrespond', 'ask', 'getclipboard', 'continue']] = None,
+        ask_for_type: Optional[Literal['files', 'text', 'date', 'photos', 'contacts', 'email-address', 'music', 'phone-number']] = None,
+        file_picker_mode: Optional[Literal['files', 'folders']] = 'files',
+        photo_picker_modes: Optional[list[Literal['images', 'videos', 'live-photos', 'any']]] = None,
+        date_picker_mode: Optional[str] = '',
+        respond_message: Optional[str] = '',
+        select_multiple: Optional[bool] = None,
         workflow_types: Optional[list[Literal["quick-action", "share-sheet", "menu-bar", "watch", "screen", "any"]]] = None,
         input_types: Optional[list[Literal["images", "media", "files", "folders", "pdfs", "text", "rich-text", "safari-web-pages", "urls", "articles", "maps-links", "locations", "contacts", "email-addresses", "phone-numbers", "dates", "app-store-apps", "itunes-products", "any"]]] = None
     ) -> dict:
@@ -411,7 +418,7 @@ def build_default_shortcut(
         "WFWorkflowImportQuestions": [], 
         "WFWorkflowInputContentItemClasses": [], 
         "WFWorkflowMinimumClientVersion": 900, 
-        "WFWorkflowMinimumClientVersionString": "900", 
+        "WFWorkflowMinimumClientVersionString": "900",
         "WFWorkflowOutputContentItemClasses": [], 
         "WFWorkflowTypes": [] 
     }
@@ -421,7 +428,7 @@ def build_default_shortcut(
         'share-sheet': 'ActionExtension',
         'menu-bar': 'MenuBar',
         'watch': 'Watch',
-        'screen': 'RecievesOnScreenContent'
+        'screen': 'ReceivesOnScreenContent'
     }
 
     input_types_map = {
@@ -460,15 +467,148 @@ def build_default_shortcut(
         'pink': 3980825855,
         'gray': 255,
         'sage': 3031607807,
-        'khaki': 3031607807
+        'khaki': 2846468607
+    }
+    
+    ask_types_map = {
+        'files': 'WFGenericFileContentItem',
+        'text': 'WFStringContentItem',
+        'date': 'WFDateContentItem',
+        'photos': 'WFPhotoMediaContentItem',
+        'contacts': 'WFContactContentItem',
+        'email-address': 'WFEmailAddressContentItem',
+        'music': 'WFMPMediaContentItem',
+        'phone-number': 'WFPhoneNumberContentItem'
     }
 
-    try:
-        glyph_map = load_resource(filename='glyphs.json', data_type='json')
-    except FileNotFoundError as e:
-        print(e.__notes__[0], file=sys.stderr)
-        sys.exit(1)
+    file_picker_map = {
+        'files': 'Files',
+        'folders': 'Folders'
+    }
 
+    photo_picker_map = {
+        'images': 'Images',
+        'videos': 'Videos',
+        'live-photos': 'Live Photos'
+    }
+
+    if no_input_action:
+        if no_input_action == 'stopandrespond':
+            if not respond_message:
+                respond_message = ''
+            behavior = {
+                'Name': 'WFWorkflowNoInputBehaviorShowError',
+                'Parameters': {
+                    'Error': respond_message
+                }
+            }
+            base_shortcut['WFWorkflowNoInputBehavior'] = behavior
+        elif no_input_action == 'getclipboard':
+            behavior = {
+                'Name': 'WFWorkflowNoInputBehaviorGetClipboard',
+                'Parameters': {}
+            }
+            base_shortcut['WFWorkflowNoInputBehavior'] = behavior
+        elif no_input_action == 'continue':
+            pass
+        else:
+            print(f"\033[31mError\033[0m: Invalid default behavior '{no_input_action}'. Choose from {' ,'.join(['stopandrespond', 'getclipboard', 'continue'])}", file=sys.stderr)
+            sys.exit(1)
+    elif ask_for_type:
+        if ask_for_type not in ask_types_map:
+            print(f"\033[31mError\033[0m: Invalid 'Ask For' type '{ask_for_type}'. Choose from {' ,'.join(list(ask_types_map.keys()))}", file=sys.stderr)
+            sys.exit(1)
+        
+        if ask_for_type == 'files':
+            item_class = ask_types_map['files']
+            parameters = {
+                'ItemClass': item_class,
+                'SerializedParameters': {
+                    'WFPickingMode': file_picker_map[file_picker_mode],
+                    'SelectMultiple': select_multiple,
+                }
+            }
+            behavior = {
+                'Name': 'WFWorkflowNoInputBehaviorAskForInput',
+                'Parameters': parameters
+            }
+            base_shortcut['WFWorkflowNoInputBehavior'] = behavior
+        elif ask_for_type == 'photos':
+            item_class = ask_types_map['photos']
+            if photo_picker_modes:
+                if 'any' in photo_picker_modes:
+                    photo_picker_modes = list(photo_picker_map.values())
+                else:
+                    photo_picker_modes = [photo_picker_map[photo_type] for photo_type in photo_picker_modes]
+            parameters = {
+                'ItemClass': item_class,
+                'SerializedParameters': {
+                    'WFPhotoPickerTypes': photo_picker_modes,
+                    'WFSelectMultiplePhotos': select_multiple
+                },
+            }
+            behavior = {
+                'Name': 'WFWorkflowNoInputBehaviorAskForInput',
+                'Parameters': parameters
+            }
+            base_shortcut['WFWorkflowNoInputBehavior'] = behavior
+        elif ask_for_type == 'date':
+            item_class = ask_types_map['date']
+            if date_picker_mode == 'current':
+                parameters = {
+                    'ItemClass': item_class,
+                    "SerializedParameters": {
+                        "WFDateActionDate": 'Current Date',
+                    }
+                }
+            else:
+                parameters = {
+                    'ItemClass': item_class,
+                    "SerializedParameters": {
+                        "WFDateActionDate": date_picker_mode,
+                        "WFDateActionMode": "Specified Date"
+                    }
+                }
+            behavior = {
+                'Name': 'WFWorkflowNoInputBehaviorAskForInput',
+                'Parameters': parameters
+            }
+            base_shortcut['WFWorkflowNoInputBehavior'] = behavior
+        elif ask_for_type == 'contacts':
+            item_class = ask_types_map['contacts']
+            parameters = {
+                'ItemClass': item_class,
+                "SerializedParameters": {
+                    "WFSelectMultiple": select_multiple
+                }
+            }
+            behavior = {
+                'Name': 'WFWorkflowNoInputBehaviorAskForInput',
+                'Parameters': parameters
+            }
+            base_shortcut['WFWorkflowNoInputBehavior'] = behavior
+        elif ask_for_type == 'music':
+            item_class = ask_types_map['music']
+            parameters = {
+                "ItemClass": item_class,
+                "SerializedParameters": {
+                "WFExportSongActionSelectMultiple": select_multiple
+                }
+            }
+            behavior = {
+                'Name': 'WFWorkflowNoInputBehaviorAskForInput',
+                'Parameters': parameters
+            }
+            base_shortcut['WFWorkflowNoInputBehavior'] = behavior
+        else:
+            item_class = ask_types_map[ask_for_type]
+            behavior = {
+            "Name":"WFWorkflowNoInputBehaviorAskForInput",
+            "Parameters": {
+                "ItemClass": item_class
+                }
+            }
+            base_shortcut['WFWorkflowNoInputBehavior'] = behavior
     if color:
         if color in color_map:
             base_shortcut['WFWorkflowIcon']['WFWorkflowIconStartColor'] = color_map[color]
@@ -477,6 +617,11 @@ def build_default_shortcut(
             base_shortcut['WFWorkflowIcon']['WFWorkflowIconStartColor'] = color_map['purple']
 
     if glyph:
+        try:
+            glyph_map = load_resource(filename='glyphs.json', data_type='json')
+        except FileNotFoundError as e:
+            print(e.__notes__[0], file=sys.stderr)
+            sys.exit(1)
         if glyph in glyph_map:
             base_shortcut['WFWorkflowIcon']['WFWorkflowIconGlyphNumber'] = glyph_map[glyph]
         else:
@@ -485,14 +630,14 @@ def build_default_shortcut(
 
     if workflow_types:
         if 'any' in workflow_types:
-            selected_workflow_types = [workflow_types_map.get(item) for item in workflow_types_map.keys()]
+            selected_workflow_types = list(workflow_types_map.values())
         else:
             selected_workflow_types = [workflow_types_map.get(item) for item in workflow_types if item in workflow_types_map]
         base_shortcut['WFWorkflowTypes'] = selected_workflow_types
 
     if input_types:
         if 'any' in input_types:
-            selected_input_types = [input_types_map.get(item) for item in input_types_map.keys()]
+            selected_input_types = list(input_types_map.values())
         else:
             selected_input_types = [input_types_map.get(item) for item in input_types if item in input_types_map]
         base_shortcut['WFWorkflowInputContentItemClasses'] = selected_input_types
@@ -673,7 +818,7 @@ def compare_shortcuts(name1: str, name2: str) -> None:
 
     for name in [name1, name2]:
         if not shortcut_exists(name):
-            print(f"\033[31mError\033[0m: '{name}' does not appear to match the name of a shortcut in your library")
+            print(f"\033[31mError\033[0m: '{name}' does not appear to match the name of a shortcut in your library", file=sys.stderr)
             sys.exit(1)
     
     shortcut1 = get_shortcut_plist(name1, output_dict=False).splitlines(keepends=False)
@@ -1241,8 +1386,8 @@ def main():
             "  shortcut-util import <path-to-shortcut-file>\n"
             "  shortcut-util import <shortcut-share-url> --url\n"
             "  shortcut-util create\n"
-            "  shortcut-util create -n <new-shortcut-name> -i images media -t share-sheet -c red -g photoStack\n"
-            "  shortcut-util create --name <new-shortcut-name> --input-types locations --workflow-types share-sheet --color lime --glyph locationArrow\n"
+            "  shortcut-util create -n <new-shortcut-name> -i images media -t share-sheet -c red -g photoStack --ask photos --photo-modes any --multiple\n"
+            "  shortcut-util create --name <new-shortcut-name> --input-types locations --workflow-types share-sheet --color lime --glyph locationArrow --no-input-behavior getclipboard \n"
             "  shortcut-util icloud-url <shortcut-name>\n"
             "  shortcut-util export -n <shortcut-name> -s <save-destination>\n"
             "  shortcut-util export --names <shortcut1> <shortcut2> --save-dir <save-destination> --organize\n"
@@ -1283,7 +1428,11 @@ def main():
     convert_parser.add_argument('-j','--json', action='store_true', help="Convert the Shortcut to JSON")
     convert_parser.add_argument('-p','--plist', action='store_true', help="Convert the Shortcut to PLIST")
     convert_parser.add_argument('-s', '--save-dir', type=str, help='The directory to save the converted shortcut to')
-    convert_parser.add_argument('-f', '--file-extension', type=str, help="The extension to associate with the saved file. This can either be 'wflow', 'shortcut', 'plist', or 'json'.\nNote: Only files with the extensions '.wflow' '.shortcut' can be signed")
+    convert_parser.add_argument('-f', '--file-extension', type=str, help=(
+        "The extension to associate with the saved file."
+        "This can either be 'wflow', 'shortcut', 'plist', or 'json'."
+        "Note: Only files with the extensions '.wflow' '.shortcut' can be signed"
+    ))
 
     # get-uuid parser
     get_uuid_parser = subparsers.add_parser('get-uuid', help="Get the UUID of a Shortcut")
@@ -1301,11 +1450,63 @@ def main():
     # create parser
     create_parser = subparsers.add_parser('create', help='Create a new shortcut, optionally naming and configuring it')
     create_parser.add_argument('-n', '--name', type=str, help="Create a new shortcut with the given name")
-    create_parser.add_argument('-i', '--input-types', type=str, nargs='+', help='The input item content types to accept in the new shortcut (e,g. "images", "media", "files", "folders", "pdfs", "text", "rich-text", "safari-web-pages", "urls", "articles", "maps-links", "locations", "contacts", "email-addresses", "phone-numbers", "dates", "app-store-apps", "itunes-products", "all")')
-    create_parser.add_argument('-t', '--workflow-types', type=str, nargs='+', help='The workflow types to allow in the new shortcut (e,g. "quick-action", "share-sheet", "menu-bar", "watch", "screen", "any")')
-    create_parser.add_argument('-s', '--save-destination', type=str, help="The directory to save the new shortcut to. By default the newly created shortcut will delete the shortcut file after importing it unless specified not to")
-    create_parser.add_argument('-c', '--color', type=str, help="Set the color of the new shortcut (e.g, 'red', 'orange', 'tangerine', 'yellow', 'lime', 'teal', 'cyan', 'blue', 'navy', 'grape', 'purple', 'pink', 'gray', 'sage', 'khaki')")
+    create_parser.add_argument('-i', '--input-types', type=str, nargs='+', help=(
+        'The input item content types to accept in the new shortcut'
+        '(e,g."images", "media", "files", "folders", "pdfs",'
+        '"text", "rich-text", "safari-web-pages", "urls", "articles",'
+        '"maps-links", "locations", "contacts", "email-addresses", "phone-numbers",'
+        '"dates", "app-store-apps", "itunes-products", "all")'
+    ))
+    create_parser.add_argument('-t', '--workflow-types', type=str, nargs='+', help=(
+        'The workflow types to allow in the new shortcut'
+        '(e,g. "quick-action", "share-sheet", "menu-bar", "watch", "screen", "any")'
+    ))
+    create_parser.add_argument('-s', '--save-destination', type=str, help=(
+        "The directory to save the new shortcut to."
+        "By default the newly created shortcut will delete the shortcut file after importing it unless specified not to"
+    ))
+    create_parser.add_argument('-c', '--color', type=str, help=(
+        "Set the color of the new shortcut"
+        "(e.g, 'red', 'orange', 'tangerine', 'yellow', 'lime', 'teal', 'cyan', 'blue', 'navy', 'grape', 'purple', 'pink', 'gray', 'sage', 'khaki')"
+    ))
     create_parser.add_argument('-g', '--glyph', type=str, help="The name of the glyph to use in the new shortcut's icon")
+    create_parser.add_argument('--multiple', action='store_true', help="Allow selecting multiple items when '--ask files' or '--ask files' is specified")
+    create_parser.add_argument(
+        '--file-mode',
+        type=str,
+        choices=['files', 'folders'],
+        default='files',
+        help="Picking mode when '--ask files' is specified. Can be either 'files' or 'folders' (default: 'files')"
+    )
+    create_parser.add_argument(
+        '--photo-modes',
+        type=str,
+        nargs='+',
+        choices=['images', 'videos', 'live-photos', 'any'],
+        default=['images', 'videos', 'live-photos'],
+        help="Specify photo picker types when '--ask photos' is used (default: all)"
+    )
+    create_parser.add_argument(
+        '--date-mode',
+        type=str,
+        default='current',
+        help="Specify whether to use the current date or a specific date when '--ask date' is specified (default: 'current')"
+    )
+    create_parser.add_argument('--response', type=str, help="The message to fill in the 'Stop and Respond' field")
+    
+    # create parser arguments that can't be included in the same command
+    no_input_group = create_parser.add_mutually_exclusive_group()
+    no_input_group.add_argument(
+        '-D', '--no-input-behavior',
+        type=str,
+        choices=['stopandrespond', 'getclipboard', 'continue'],
+        help="The default action to perform when a shortcut is run without input"
+    )
+    no_input_group.add_argument(
+        '--ask',
+        choices=['files', 'text', 'date', 'photos', 'contacts', 'email-address', 'music', 'phone-number'],
+        help="Configures the shortcut to prompt the user for input of a specific type"
+    )
 
     # icloud-url parser
     icloud_url_parser = subparsers.add_parser('icloud-url', help='Create an iCloud Share URL for a shortcut in your library')
@@ -1494,18 +1695,25 @@ def main():
         # Default when creating a new shortcut unconfigured and with no name
         if not args.name:
             create_shortcut()
-        else:
-            shortcut = build_default_shortcut(
-                color=args.color,
-                glyph=args.glyph,
-                input_types=args.input_types,
-                workflow_types=args.workflow_types
-            )    
-            create_shortcut(
-                name=args.name,
-                default_shortcut=shortcut,
-                save_destination=args.save_destination
-            )
+            
+        shortcut = build_default_shortcut(
+            color=args.color,
+            glyph=args.glyph,
+            no_input_action=args.no_input_behavior,
+            ask_for_type=args.ask,
+            file_picker_mode=args.file_mode,
+            photo_picker_modes=args.photo_modes,
+            date_picker_mode=args.date_mode,
+            select_multiple=args.multiple,
+            respond_message=args.response,
+            input_types=args.input_types,
+            workflow_types=args.workflow_types
+        )
+        create_shortcut(
+            name=args.name,
+            default_shortcut=shortcut,
+            save_destination=args.save_destination
+        )
 
     # icloud-url main
     elif args.command == 'icloud-url':
