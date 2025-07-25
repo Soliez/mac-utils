@@ -42,7 +42,7 @@ def get_missing_resource_message(path: str) -> str:
     return message
 
 
-def load_resource(filename: str, data_type: Literal['text', 'binary', 'json', 'plist']) -> Any:
+def load_resource(filename: str, data_type: Literal['text', 'binary', 'json', 'plist'], subdirectories: list[str] = []) -> Any:
     '''
     Project resource file loader
     '''
@@ -52,7 +52,10 @@ def load_resource(filename: str, data_type: Literal['text', 'binary', 'json', 'p
         print(f"\033[31mError\033[0m: Invalid data type '{data_type}'\nValid types: ({', '.join(valid_data_types)})", file=sys.stderr)
         sys.exit(1)
 
-    resource_file = PROJECT_ROOT / 'resources' / 'shortcut_util' / filename
+    if subdirectories:
+        resource_file = PROJECT_ROOT / 'resources' / 'shortcut-util' / '/'.join(subdirectories) / filename
+    else:
+        resource_file = PROJECT_ROOT / 'resources' / 'shortcut_util' / filename
 
     if not resource_file.exists():
         error_message = get_missing_resource_message(str(resource_file))
