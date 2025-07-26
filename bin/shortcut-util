@@ -5,12 +5,12 @@ import re
 import sys
 import pty
 import json
-import errno
 import base64
 import difflib
 import argparse
 import plistlib
 import subprocess
+import importlib.util
 from time import sleep
 from io import BytesIO
 from pathlib import Path
@@ -31,35 +31,35 @@ def get_missing_resource_message(path: str) -> str:
     '''
     file = Path(path).resolve()
     lines = [
-        f"\033[31mError\033[0m: Missing necessary resource file '{file.name}' from '{str(file.parent)}'",
+        f"\033[31mError\033[0m: Missing necessary resource file '{file.name}' from '{str(file.parent)}'\n",
         "\nTo fix this, try one of the following methods:\n",
-        "1. If you downloaded the script manually, clone the full repository instead and install via Make:",
-        "\tgit clone https://github.com/Soliez/mac-utils.git && cd mac-utils && make install",
+        "\n1. If you downloaded the script manually, clone the full repository instead and install via Make:",
+        "\n\tgit clone https://github.com/Soliez/mac-utils.git && cd mac-utils && make install\n",
         "\n2. If you already cloned the repo but are missing files, move into the project directory and reset it to the latest version:",
-        "\tgit fetch origin && git reset --hard origin/main"
+        "\n\tgit fetch origin && git reset --hard origin/main"
     ]
     message = ''.join(lines)
     return message
 
 
-def load_resource(filename: str, data_type: Literal['text', 'binary', 'json', 'plist'], subdirectories: list[str] = []) -> Any:
+def load_resource(filename: str, data_type: Literal['text', 'binary', 'json', 'plist', 'python'], subdirectories: list[str] = []) -> Any:
     '''
     Project resource file loader
     '''
-    valid_data_types = ['text', 'binary', 'json', 'plist']
+    valid_data_types = ['text', 'binary', 'json', 'plist', 'python']
     
     if data_type not in valid_data_types:
         print(f"\033[31mError\033[0m: Invalid data type '{data_type}'\nValid types: ({', '.join(valid_data_types)})", file=sys.stderr)
         sys.exit(1)
 
     if subdirectories:
-        resource_file = PROJECT_ROOT / 'resources' / 'shortcut-util' / '/'.join(subdirectories) / filename
+        resource_file = PROJECT_ROOT / 'resources' / 'shortcut_util' / '/'.join(subdirectories) / filename
     else:
         resource_file = PROJECT_ROOT / 'resources' / 'shortcut_util' / filename
 
     if not resource_file.exists():
         error_message = get_missing_resource_message(str(resource_file))
-        raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), str(resource_file)).add_note(error_message)
+        raise FileNotFoundError(error_message)
     
     try:
         if data_type == 'text':
@@ -72,6 +72,11 @@ def load_resource(filename: str, data_type: Literal['text', 'binary', 'json', 'p
         elif data_type == 'plist':
             with resource_file.open(mode='rb') as f:
                 data = plistlib.load(fp=f)
+        elif data_type == 'python':
+            spec = importlib.util.spec_from_file_location(resource_file.stem, str(resource_file))
+            template_module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(template_module)
+            data = template_module.get_template()
         return data
     except (PermissionError, IsADirectoryError) as e:
         print(f"\033[31m{type(e).__name__}\033[0m: {os.strerror(e.errno)}", file=sys.stderr)
@@ -389,7 +394,7 @@ def sign_shortcut(
             input_file.rename(input_file.with_suffix(old_suffix))
 
 
-def build_default_shortcut(
+def build_shortcut(
         color: Optional[Literal['red', 'orange', 'tangerine', 'yellow', 'lime', 'teal', 'cyan', 'blue', 'navy', 'grape', 'purple', 'pink', 'gray', 'sage', 'khaki']] = None,
         glyph: Optional[str] = None,
         no_input_action: Optional[Literal['stopandrespond', 'ask', 'getclipboard', 'continue']] = None,
@@ -399,6 +404,7 @@ def build_default_shortcut(
         date_picker_mode: Optional[str] = '',
         respond_message: Optional[str] = '',
         select_multiple: Optional[bool] = None,
+        actions: Optional[list] = None,
         workflow_types: Optional[list[Literal["quick-action", "share-sheet", "menu-bar", "watch", "screen", "any"]]] = None,
         input_types: Optional[list[Literal["images", "media", "files", "folders", "pdfs", "text", "rich-text", "safari-web-pages", "urls", "articles", "maps-links", "locations", "contacts", "email-addresses", "phone-numbers", "dates", "app-store-apps", "itunes-products", "any"]]] = None
     ) -> dict:
@@ -623,7 +629,7 @@ def build_default_shortcut(
         try:
             glyph_map = load_resource(filename='glyphs.json', data_type='json')
         except FileNotFoundError as e:
-            print(e.__notes__[0], file=sys.stderr)
+            print(e.args[0], file=sys.stderr)
             sys.exit(1)
         if glyph in glyph_map:
             base_shortcut['WFWorkflowIcon']['WFWorkflowIconGlyphNumber'] = glyph_map[glyph]
@@ -644,6 +650,9 @@ def build_default_shortcut(
         else:
             selected_input_types = [input_types_map.get(item) for item in input_types if item in input_types_map]
         base_shortcut['WFWorkflowInputContentItemClasses'] = selected_input_types
+
+    if actions:
+        base_shortcut['WFWorkflowActions'] = actions
 
     return base_shortcut
 
@@ -1496,6 +1505,15 @@ def main():
         help="Specify whether to use the current date or a specific date when '--ask date' is specified (default: 'current')"
     )
     create_parser.add_argument('--response', type=str, help="The message to fill in the 'Stop and Respond' field")
+    create_parser.add_argument(
+        '--template',
+        type=str,
+        help=(
+            "The name of the action template to load\n"
+            ""
+            "For example, to load the template from <PROJECT_DIR>/resources/shortcut-util/action_templates/input-handler.py, provide 'input-handler' as the argument"
+        )
+    )
     
     # create parser arguments that can't be included in the same command
     no_input_group = create_parser.add_mutually_exclusive_group()
@@ -1698,8 +1716,18 @@ def main():
         # Default when creating a new shortcut unconfigured and with no name
         if not args.name:
             create_shortcut()
-            
-        shortcut = build_default_shortcut(
+        
+        if args.template:
+            try:
+                template_path = Path(args.template).with_suffix('.py')
+                template = load_resource(filename=template_path.name, data_type='python', subdirectories=['action_templates'])
+            except FileNotFoundError as e:
+                print(e.args[0], file=sys.stderr)
+                sys.exit(1)
+        else:
+            template = args.template
+
+        shortcut = build_shortcut(
             color=args.color,
             glyph=args.glyph,
             no_input_action=args.no_input_behavior,
@@ -1709,6 +1737,7 @@ def main():
             date_picker_mode=args.date_mode,
             select_multiple=args.multiple,
             respond_message=args.response,
+            actions=template,
             input_types=args.input_types,
             workflow_types=args.workflow_types
         )
