@@ -405,7 +405,7 @@ def build_shortcut(
         respond_message: Optional[str] = '',
         select_multiple: Optional[bool] = None,
         actions: Optional[list] = None,
-        workflow_types: Optional[list[Literal["quick-action", "share-sheet", "menu-bar", "watch", "screen", "any"]]] = None,
+        workflow_types: Optional[list[Literal["quick-action", "share-sheet", "menu-bar", "watch", "screen", "notifications", "sleep-mode", "any"]]] = None,
         input_types: Optional[list[Literal["images", "media", "files", "folders", "pdfs", "text", "rich-text", "safari-web-pages", "urls", "articles", "maps-links", "locations", "contacts", "email-addresses", "phone-numbers", "dates", "app-store-apps", "itunes-products", "any"]]] = None
     ) -> dict:
     '''
@@ -437,7 +437,9 @@ def build_shortcut(
         'share-sheet': 'ActionExtension',
         'menu-bar': 'MenuBar',
         'watch': 'Watch',
-        'screen': 'ReceivesOnScreenContent'
+        'screen': 'ReceivesOnScreenContent',
+        'notifications': 'NCWidget',
+        'sleep-mode': 'Sleep'
     }
 
     input_types_map = {
@@ -1471,7 +1473,7 @@ def main():
     ))
     create_parser.add_argument('-t', '--workflow-types', type=str, nargs='+', help=(
         'The workflow types to allow in the new shortcut'
-        '(e,g. "quick-action", "share-sheet", "menu-bar", "watch", "screen", "any")'
+        '(e,g. "quick-action", "share-sheet", "menu-bar", "watch", "screen", "notifications", "sleep-mode", "any")'
     ))
     create_parser.add_argument('-s', '--save-destination', type=str, help=(
         "The directory to save the new shortcut to."
